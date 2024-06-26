@@ -14,30 +14,18 @@
 
 from __future__ import annotations
 import numpy as np
-import os
-from typing import Optional, Dict, Sequence, Any, Union, Iterable
+from typing import Union, Iterable
 import logging
 
+from qiskit.transpiler.passmanager import PassManager
 from qiskit_aer.noise import NoiseModel
 from qiskit_aer.primitives import EstimatorV2 as AerEstimator
 
-from qiskit.circuit import QuantumCircuit
 from qiskit.providers import BackendV1, BackendV2
-from qiskit.quantum_info.operators.base_operator import BaseOperator
-from qiskit.quantum_info.operators import SparsePauliOp
-from qiskit.primitives import BaseEstimator
-from qiskit.primitives.base import BaseEstimatorV2
 from qiskit.primitives.containers import EstimatorPubLike
 from qiskit.primitives.containers.estimator_pub import EstimatorPub
+from qiskit_ibm_runtime.transpiler.passes.basis.to_nearest_clifford import ToNearestClifford
 
-from .runtime_job import RuntimeJob
-from .runtime_job_v2 import RuntimeJobV2
-from .ibm_backend import IBMBackend
-from .options.estimator_options import EstimatorOptions
-from .base_primitive import BasePrimitiveV1, BasePrimitiveV2
-from .utils.deprecation import deprecate_arguments, issue_deprecation_msg
-from .utils.qctrl import validate as qctrl_validate
-from .utils.qctrl import validate_v2 as qctrl_validate_v2
 from .utils import validate_estimator_pubs, validate_isa_circuits
 
 # pylint: disable=unused-import,cyclic-import
@@ -64,6 +52,10 @@ class Debugger:
         validate_estimator_pubs(coerced_pubs)
         for pub in coerced_pubs:
             validate_isa_circuits([pub.circuit], self.backend.target)
+
+        # cliffordization
+        for pub in coerced_pubs:
+            pub.circuit = PassManager([ToNearestClifford()]).run(pub.circuit)
 
         # ideal simulation
         options = {"method": "stabilizer"}

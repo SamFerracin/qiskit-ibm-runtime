@@ -12,18 +12,14 @@
 
 """Pass to convert Id gate operations to a delay instruction."""
 
-from typing import Dict
+import numpy as np
 
-from qiskit.converters import dag_to_circuit, circuit_to_dag
-
-from qiskit.circuit import ControlFlowOp
-from qiskit.circuit import Delay
 from qiskit.circuit.library import CXGate, CZGate, ECRGate, RZGate, SXGate, XGate
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.transpiler.basepasses import TransformationPass
-from qiskit.transpiler.instruction_durations import InstructionDurations
 
 SUPPORTED_GATES = (CXGate, CZGate, ECRGate, RZGate, SXGate, XGate)
+
 
 class ToNearestClifford(TransformationPass):
     """
@@ -39,14 +35,17 @@ class ToNearestClifford(TransformationPass):
     """
 
     def __init__(self):
-        """Convert :class:`qiskit.circuit.gate.Gate`\s to the nearest Clifford gate.
-        """
+        """Convert :class:`qiskit.circuit.gate.Gate`\s to the nearest Clifford gate."""
         super().__init__()
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         for node in dag.op_nodes():
             if not isinstance(node.op, SUPPORTED_GATES):
-                msg = f"Found gate ``{node.op.__class__.__name__}``, but only gates"
-                msg += f" {[g for g in SUPPORTED_GATES]} are supported."
+                msg = f"Gate ``{node.op.__class__.__name__}`` is not supported."
                 raise ValueError(msg)
+            if isinstance(node.op, RZGate):
+                angle = node.op.params[0]
+                rem = angle % (np.pi / 2)
+                new_angle = angle - rem if rem < np.pi / 4 else angle + np.pi / 2 - rem
+                dag.substitute_node(node, RZGate(new_angle), inplace=True)
         return dag
