@@ -15,7 +15,6 @@
 from __future__ import annotations
 import numpy as np
 from typing import Union, Iterable
-import logging
 
 from qiskit.transpiler.passmanager import PassManager
 from qiskit_aer.noise import NoiseModel
@@ -27,12 +26,6 @@ from qiskit.primitives.containers.estimator_pub import EstimatorPub
 from qiskit_ibm_runtime.transpiler.passes.basis.to_nearest_clifford import ToNearestClifford
 
 from .utils import validate_estimator_pubs, validate_isa_circuits
-
-# pylint: disable=unused-import,cyclic-import
-from .session import Session
-from .batch import Batch
-
-logger = logging.getLogger(__name__)
 
 
 class Debugger:
@@ -54,16 +47,15 @@ class Debugger:
             validate_isa_circuits([pub.circuit], self.backend.target)
 
         # cliffordization
-        clifford_coerced_pubs = coerced_pubs
-        # clifford_coerced_pubs = [
-        #     EstimatorPub(
-        #         PassManager([ToNearestClifford()]).run(pub.circuit),
-        #         pub.observables,
-        #         pub.parameter_values,
-        #         pub.precision,
-        #     )
-        #     for pub in coerced_pubs
-        # ]
+        clifford_coerced_pubs = [
+            EstimatorPub(
+                PassManager([ToNearestClifford()]).run(pub.circuit),
+                pub.observables,
+                pub.parameter_values,
+                pub.precision,
+            )
+            for pub in coerced_pubs
+        ]
 
         # ideal simulation
         options = {"method": "stabilizer"}
