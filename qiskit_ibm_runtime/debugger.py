@@ -54,19 +54,27 @@ class Debugger:
             validate_isa_circuits([pub.circuit], self.backend.target)
 
         # cliffordization
-        for pub in coerced_pubs:
-            pub.circuit = PassManager([ToNearestClifford()]).run(pub.circuit)
+        clifford_coerced_pubs = coerced_pubs
+        # clifford_coerced_pubs = [
+        #     EstimatorPub(
+        #         PassManager([ToNearestClifford()]).run(pub.circuit),
+        #         pub.observables,
+        #         pub.parameter_values,
+        #         pub.precision,
+        #     )
+        #     for pub in coerced_pubs
+        # ]
 
         # ideal simulation
         options = {"method": "stabilizer"}
         ideal_estimator = AerEstimator(options={"backend_options": options})
-        ideal_results = ideal_estimator.run(coerced_pubs).result()
+        ideal_results = ideal_estimator.run(clifford_coerced_pubs).result()
 
         # noisy simulation
         noise_model = NoiseModel.from_backend(self.backend, thermal_relaxation=False)
         options.update({"noise_model": noise_model})
         noisy_estimator = AerEstimator(options={"backend_options": options})
-        noisy_results = noisy_estimator.run(coerced_pubs).result()
+        noisy_results = noisy_estimator.run(clifford_coerced_pubs).result()
 
         ret = []
         for noisy_result, ideal_result in zip(noisy_results, ideal_results):
