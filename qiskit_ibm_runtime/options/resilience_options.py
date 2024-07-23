@@ -18,6 +18,7 @@ from dataclasses import asdict
 from pydantic import model_validator, Field
 
 from .utils import Unset, UnsetType, Dict, primitive_dataclass
+from ..utils.noise_learner_result import NoiseLearnerResult
 from .measure_noise_learning_options import MeasureNoiseLearningOptions
 from .zne_options import ZneOptions
 from .pec_options import PecOptions
@@ -61,6 +62,8 @@ class ResilienceOptionsV2:
 
         layer_noise_learning: Layer noise learning options.
             See :class:`LayerNoiseLearningOptions` for all options.
+
+        layer_noise_model: A :class:`NoiseLearnerResult` object. If present, ...
     """
 
     measure_mitigation: Union[UnsetType, bool] = Unset
@@ -74,6 +77,7 @@ class ResilienceOptionsV2:
     layer_noise_learning: Union[LayerNoiseLearningOptions, Dict] = Field(
         default_factory=LayerNoiseLearningOptions
     )
+    layer_noise_model: Union[UnsetType, NoiseLearnerResult] = Unset
 
     @model_validator(mode="after")
     def _validate_options(self) -> "ResilienceOptionsV2":
