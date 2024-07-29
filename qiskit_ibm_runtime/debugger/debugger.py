@@ -42,15 +42,15 @@ class Debugger:
     2. Next, it simulates the estimation experiments in a noisy setting, obtaining a the noisy
       expectation values.
     3. Finally, it computes a figure of merit that captures the expected performance of an
-      error-mitigation experiment performed on the chosen backend, for example the ration 
+      error-mitigation experiment performed on the chosen backend, for example the ration
       ``noisy_vals/id_vals`` between the noisy and ideal expectation values (ratio).
-    
+
     To ensure scalability, the simulations in steps 1 and 2 involve Clifford circuits obtained by
     applying the
     :meth:`~.qiskit_ibm_runtime.transpiler.passes.basis.to_nearest_clifford.ToNearestClifford`
     transpiler pass to the circuits in the PUBs. Additionally, the noise in step 2 is depolarizing
     noise built with ``NoiseModel.from_backend(backend, thermal_relaxation=False)``.
-    
+
     Args:
         backend: A backend.
         plugin: A plugin that specifies the figure of merit returned by this debugger.
@@ -66,7 +66,7 @@ class Debugger:
         The backend in this debugger.
         """
         return self._backend
-    
+
     @property
     def plugin(self):
         r"""
@@ -110,4 +110,4 @@ class Debugger:
         return self.plugin(noisy_results, ideal_results)
 
     def __repr__(self) -> str:
-        return f"Debugger(backend=\"{self.backend.name}\", plugin=\"{self.plugin.name}\")"
+        return f'Debugger(backend="{self.backend.name}", plugin="{self.plugin.name}")'

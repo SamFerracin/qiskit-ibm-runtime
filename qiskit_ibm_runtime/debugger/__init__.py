@@ -14,4 +14,4 @@
 """
 
 from .plugins import Plugin
-from .debugger import Debugger
+from .debugger2 import Debugger
