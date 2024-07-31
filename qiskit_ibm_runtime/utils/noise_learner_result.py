@@ -19,7 +19,6 @@ from typing import Any, Iterator, Sequence
 
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import PauliList
-from qiskit.primitives import EstimatorResult
 
 
 @dataclass(frozen=True)
@@ -62,29 +61,8 @@ class NoiseLearnerResult:
             metadata: Metadata that is common to all pub results; metadata specific to particular
                 pubs should be placed in their metadata fields. Keys are expected to be strings.
         """
-        self._data = data
-        self._metadata = metadata or {}
-
-    @classmethod
-    def from_estimator_result(cls, result: EstimatorResult) -> NoiseLearnerResult:
-        """Construct noise learner results from estimator results.
-
-        Args:
-            result: The estimator results.
-        """
-        resilience = result.metadata["resilience"]
-        try:
-            noise_model = resilience["layer_noise_model"]
-        except KeyError:
-            return NoiseLearnerResult(data=[])
-
-        data = []
-        for layer in noise_model:
-            datum = NoiseLearnerDatum(
-                layer[0]["circuit"], layer[0]["qubits"], layer[1]["generators"], layer[1]["rates"]
-            )
-            data.append(datum)
-        return NoiseLearnerResult(data)
+        self._data = list(data)
+        self._metadata = metadata.copy() or {}
 
     @property
     def data(self) -> Sequence[NoiseLearnerDatum]:
