@@ -277,17 +277,10 @@ class RuntimeEncoder(json.JSONEncoder):
             }
             return {"__type__": "DataBin", "__value__": out_val}
         if isinstance(obj, LayerNoise):
-            out_val = {
-                "circuit": obj.circuit,
-                "qubits": obj.qubits,
-                "errors": obj.errors,
-            }
+            out_val = {"circuit": obj.circuit, "qubits": obj.qubits, "errors": obj.errors}
             return {"__type__": "LayerNoise", "__value__": out_val}
         if isinstance(obj, LindbladErrors):
-            out_val = {
-                "paulis": obj.paulis,
-                "rates": obj.rates,
-            }
+            out_val = {"paulis": obj.paulis, "rates": obj.rates}
             return {"__type__": "LindbladErrors", "__value__": out_val}
         if isinstance(obj, EstimatorPub):
             return (
@@ -398,6 +391,10 @@ class RuntimeDecoder(json.JSONDecoder):
                 if shape is not None and isinstance(shape, list):
                     shape = tuple(shape)
                 return DataBin(shape=shape, **obj_val["fields"])
+            if obj_type == "LayerNoise":
+                return LayerNoise(**obj_val)
+            if obj_type == "LindbladErrors":
+                return LindbladErrors(**obj_val)
             if obj_type == "SamplerPubResult":
                 return SamplerPubResult(**obj_val)
             if obj_type == "PubResult":
