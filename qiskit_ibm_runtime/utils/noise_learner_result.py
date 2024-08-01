@@ -14,56 +14,75 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Optional, Sequence, Union
 
 from qiskit.circuit import QuantumCircuit
 from qiskit.quantum_info import PauliList
 
 
 class LindbladErrors:
-    """A container for the generators and rates for a single-layer noise process
-    in Pauli Lindblad format.
+    """
+    A container for the generators and rates of a single-layer sparse Pauli-Lindblad noise
+    model.
 
     Args:
-        generators: The list of generators for the Pauli errors.
-        rates: The rates for the given Pauli error generators.
+        paulis: A list of the Pauli generators for the noise model.
+        rates: A list of the rates for the Pauli-Lindblad paulis.
+        rates_stderr: A list of standard errors for the ``rates``.
 
     Raises:
-        ValueError: If ``generators`` and ``rates`` have different lengths.
+        ValueError: If ``paulis``, ``rates``, and ``rates_stderr`` have inconsistent lengths.
     """
 
-    def __init__(self, generators: PauliList, rates: Sequence[float]) -> None:
-        if len(generators) != len(rates):
-            msg = f"``generators`` has length {len(generators)}, but "
+    def __init__(
+        self, paulis: PauliList, rates: Sequence[float], rates_stderr: Optional[Sequence[float]]
+    ) -> None:
+        if len(paulis) != len(rates):
+            msg = f"``paulis`` has length {len(paulis)}, but "
+            msg += f"``rates`` has length {len(rates)}."
+            raise ValueError(msg)
+        if rates_stderr and len(rates) != len(rates_stderr):
+            msg = f"``rates_stderr`` has length {len(paulis)}, but "
             msg += f"``rates`` has length {len(rates)}."
             raise ValueError(msg)
 
-        self._generators = generators
+        self._paulis = paulis
         self._rates = rates
+        self._rates_stderr = rates_stderr
 
     @property
-    def generators(self):
+    def paulis(self) -> PauliList:
         r"""
-        The generators of this :class:`LindbladErrors`.
+        The Pauli generators of this :class:`~.LindbladErrors`.
         """
-        return self._generators
+        return self._paulis
 
     @property
-    def rates(self):
+    def rates(self) -> Sequence[float]:
         r"""
-        The rates of this :class:`LindbladErrors`.
+        The rates of this :class:`~.LindbladErrors`.
         """
         return self._rates
 
     @property
+    def rates_stderr(self) -> Union[None, Sequence[float]]:
+        r"""
+        The standard errors for the rates of this :class:`~.LindbladErrors`.
+        """
+        return self._rates_stderr
+
+    @property
     def num_qubits(self):
         r"""
-        The number of qubits in this :class:`LindbladErrors`.
+        The number of qubits in this :class:`~.LindbladErrors`.
         """
-        return self.generators.num_qubits
-    
+        return self.paulis.num_qubits
+
     def __repr__(self) -> str:
-        return f"LindbladErrors(generators={self.generators}, rates={self.rates})"
+        ret = f"paulis={self.paulis}, rates={self.rates}"
+        if self.rates_stderr:
+            ret += ", rates_stderr={self.rates_stderr}"
+        return f"LindbladErrors({ret})"
 
 
 class LayerNoise:
@@ -90,26 +109,26 @@ class LayerNoise:
         self._errors = errors
 
     @property
-    def circuit(self):
+    def circuit(self) -> QuantumCircuit:
         r"""
         The circuit in this :class:`LayerNoise`.
         """
         return self._circuit
 
     @property
-    def qubits(self):
+    def qubits(self) -> Sequence[int]:
         r"""
         The qubits in this :class:`LayerNoise`.
         """
         return self._qubits
 
     @property
-    def errors(self):
+    def errors(self) -> LindbladErrors:
         r"""
         The errors in this :class:`LayerNoise`.
         """
         return self._errors
-    
+
     def __repr__(self) -> str:
         ret = f"circuit={repr(self.circuit)}, qubits={self.qubits}, errors={self.errors})"
         return f"LayerNoise({ret})"
