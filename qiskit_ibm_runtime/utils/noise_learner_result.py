@@ -35,7 +35,10 @@ class LindbladErrors:
     """
 
     def __init__(
-        self, paulis: PauliList, rates: Sequence[float], rates_stderr: Optional[Sequence[float]]
+        self,
+        paulis: PauliList,
+        rates: Sequence[float],
+        rates_stderr: Optional[Sequence[float]] = None,
     ) -> None:
         if len(paulis) != len(rates):
             msg = f"``paulis`` has length {len(paulis)}, but "
