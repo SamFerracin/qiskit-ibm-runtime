@@ -14,7 +14,7 @@
 
 from typing import Dict
 
-from .noise_learner_result import NoiseLearnerDatum, NoiseLearnerResult
+from .noise_learner_result import LindbladErrors, LayerNoise, NoiseLearnerResult
 from .result_decoder import ResultDecoder
 
 
@@ -30,9 +30,8 @@ class NoiseLearnerResultDecoder(ResultDecoder):
 
         data = []
         for layer in decoded["data"]:
-            datum = NoiseLearnerDatum(
-                layer[0]["circuit"], layer[0]["qubits"], layer[1]["generators"], layer[1]["rates"]
-            )
+            errors = LindbladErrors(layer[1]["generators"], layer[1]["rates"])
+            datum = LayerNoise(layer[0]["circuit"], layer[0]["qubits"], errors)
             data.append(datum)
 
         return NoiseLearnerResult(data=data, metadata=decoded["metadata"])

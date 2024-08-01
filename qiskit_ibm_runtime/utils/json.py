@@ -71,7 +71,7 @@ from qiskit.primitives.containers import (
     PrimitiveResult,
 )
 from qiskit_ibm_runtime.options.zne_options import ExtrapolatorType
-from qiskit_ibm_runtime.utils.noise_learner_result import NoiseLearnerResult
+from qiskit_ibm_runtime.utils.noise_learner_result import LayerNoise, LindbladErrors
 
 _TERRA_VERSION = tuple(
     int(x) for x in re.match(r"\d+\.\d+\.\d", _terra_version_string).group(0).split(".")[:3]
@@ -220,16 +220,6 @@ class RuntimeEncoder(json.JSONEncoder):
             return {"__type__": "set", "__value__": list(obj)}
         if isinstance(obj, Result):
             return {"__type__": "Result", "__value__": obj.to_dict()}
-        if isinstance(obj, NoiseLearnerResult):
-            ret = []
-            for d in obj.data:
-                ret.append(
-                    [
-                        {"circuit": d.circuit, "qubits": d.qubits},
-                        {"generators": d.generators, "rates": d.rates},
-                    ]
-                )
-            return ret
         if hasattr(obj, "to_json"):
             return {"__type__": "to_json", "__value__": obj.to_json()}
         if isinstance(obj, QuantumCircuit):
@@ -286,6 +276,10 @@ class RuntimeEncoder(json.JSONEncoder):
                 "fields": dict(obj.items()),
             }
             return {"__type__": "DataBin", "__value__": out_val}
+        if isinstance(obj, LayerNoise):
+            return obj.circuit, obj.qubits, obj.errors
+        if isinstance(obj, LindbladErrors):
+            return obj.generators, obj.rates
         if isinstance(obj, EstimatorPub):
             return (
                 obj.circuit,
