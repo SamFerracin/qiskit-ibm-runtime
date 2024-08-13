@@ -24,14 +24,6 @@ from qiskit.qobj.utils import MeasLevel, MeasReturnType
 
 from qiskit.providers.backend import BackendV2 as Backend
 from qiskit.providers.options import Options
-from qiskit.providers.models import (
-    BackendStatus,
-    BackendProperties,
-    PulseDefaults,
-    GateConfig,
-    QasmBackendConfiguration,
-    PulseBackendConfiguration,
-)
 from qiskit.pulse.channels import (
     AcquireChannel,
     ControlChannel,
@@ -39,6 +31,15 @@ from qiskit.pulse.channels import (
     MeasureChannel,
 )
 from qiskit.transpiler.target import Target
+
+from .models import (
+    BackendStatus,
+    BackendProperties,
+    PulseDefaults,
+    GateConfig,
+    QasmBackendConfiguration,
+    PulseBackendConfiguration,
+)
 
 # temporary until we unite the 2 Session classes
 from .provider_session import (
@@ -81,7 +82,7 @@ class IBMBackend(Backend):
 
     This class represents an IBM Quantum backend. Its attributes and methods provide
     information about the backend. For example, the :meth:`status()` method
-    returns a :class:`BackendStatus<qiskit.providers.models.BackendStatus>` instance.
+    returns a :class:`BackendStatus<~.providers.models.BackendStatus>` instance.
     The instance contains the ``operational`` and ``pending_jobs`` attributes, which state whether
     the backend is operational and also the number of jobs in the server queue for the backend,
     respectively::
@@ -188,9 +189,9 @@ class IBMBackend(Backend):
         self._service = service
         self._api_client = api_client
         self._configuration = configuration
-        self._properties = None
-        self._defaults = None
-        self._target = None
+        self._properties: Any = None
+        self._defaults: Any = None
+        self._target: Any = None
         self._max_circuits = configuration.max_experiments
         self._session: ProviderSession = None
         if (
@@ -258,7 +259,7 @@ class IBMBackend(Backend):
         """Converts backend configuration, properties and defaults to Target object"""
         if refresh or not self._target:
             self._target = convert_to_target(
-                configuration=self._configuration,
+                configuration=self._configuration,  # type: ignore[arg-type]
                 properties=self._properties,
                 defaults=self._defaults,
                 # In IBM backend architecture as of today
@@ -366,7 +367,7 @@ class IBMBackend(Backend):
             refresh: If ``True``, re-query the server for the backend properties.
                 Otherwise, return a cached version.
             datetime: By specifying `datetime`, this function returns an instance
-                of the :class:`BackendProperties<qiskit.providers.models.BackendProperties>`
+                of the :class:`BackendProperties<~.providers.models.BackendProperties>`
                 whose timestamp is closest to, but older than, the specified `datetime`.
                 Note that this is only supported using ``ibm_quantum`` runtime.
 
@@ -405,7 +406,7 @@ class IBMBackend(Backend):
         """Return the backend status.
 
         Note:
-            If the returned :class:`~qiskit.providers.models.BackendStatus`
+            If the returned :class:`~.providers.models.BackendStatus`
             instance has ``operational=True`` but ``status_msg="internal"``,
             then the backend is accepting jobs but not processing them.
 
@@ -683,7 +684,7 @@ class IBMBackend(Backend):
             msg="backend.run() and related sessions methods are deprecated ",
             version="0.23",
             remedy="More details can be found in the primitives migration "
-            "guide https://docs.quantum.ibm.com/api/migration-guides/qiskit-runtime.",
+            "guide https://docs.quantum.ibm.com/migration-guides/qiskit-runtime.",
             period="6 months",
         )
         validate_job_tags(job_tags)
@@ -844,7 +845,7 @@ class IBMBackend(Backend):
             msg="backend.run() and related sessions methods are deprecated ",
             version="0.23",
             remedy="More details can be found in the primitives migration guide "
-            "https://docs.quantum.ibm.com/api/migration-guides/qiskit-runtime.",
+            "https://docs.quantum.ibm.com/migration-guides/qiskit-runtime.",
             period="6 months",
         )
         if not self._configuration.simulator:
@@ -863,7 +864,7 @@ class IBMBackend(Backend):
             msg="backend.run() and related sessions methods are deprecated ",
             version="0.23",
             remedy="More details can be found in the primitives migration "
-            "guide https://docs.quantum.ibm.com/api/migration-guides/qiskit-runtime.",
+            "guide https://docs.quantum.ibm.com/migration-guides/qiskit-runtime.",
             period="6 months",
         )
         return self._session
@@ -874,7 +875,7 @@ class IBMBackend(Backend):
             msg="backend.run() and related sessions methods are deprecated ",
             version="0.23",
             remedy="More details can be found in the primitives migration "
-            "guide https://docs.quantum.ibm.com/api/migration-guides/qiskit-runtime.",
+            "guide https://docs.quantum.ibm.com/migration-guides/qiskit-runtime.",
             period="6 months",
         )
         if self._session:
@@ -892,7 +893,7 @@ class IBMBackend(Backend):
             msg="backend.run() and related sessions methods are deprecated ",
             version="0.23",
             remedy="More details can be found in the primitives migration "
-            "guide https://docs.quantum.ibm.com/api/migration-guides/qiskit-runtime.",
+            "guide https://docs.quantum.ibm.com/migration-guides/qiskit-runtime.",
             period="6 months",
         )
         if self._session:
