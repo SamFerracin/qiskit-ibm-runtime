@@ -30,7 +30,7 @@ class DoubleSliceSpan(ExecutionSpan):
     This type of execution span references pub result data by assuming that it is a sliceable
     portion of the data where the shots are the outermost slice and the rest of the data is
     flattened. Therefore, for each pub dependent on this span, the constructor accepts two
-    :class:`slice` objects, along with the corresponding shape of the data to be sliced; in contrast
+    :class:`slice` instances, along with the corresponding shape of the data to be sliced; in contrast
     to :class:`~.SliceSpan`, this class does not assume that *all* shots for a particular set of
     parameter values are contiguous in the array of data.
 
@@ -68,6 +68,9 @@ class DoubleSliceSpan(ExecutionSpan):
         return size
 
     def mask(self, pub_idx: int) -> npt.NDArray[np.bool_]:
+        if pub_idx not in self._data_slices:
+            raise KeyError(f"Pub {pub_idx} is not included in the span.")
+
         shape, args_sl, shots_sl = self._data_slices[pub_idx]
         mask = np.zeros(shape, dtype=np.bool_)
         mask.reshape(np.prod(shape[:-1], dtype=int), shape[-1])[(args_sl, shots_sl)] = True

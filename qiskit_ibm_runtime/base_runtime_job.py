@@ -13,7 +13,7 @@
 """Base runtime job class."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Callable, Dict, Type, Union, Sequence, List, Tuple
+from typing import Any, Optional, Dict, Type, Union, Sequence, List, Tuple
 import logging
 from concurrent import futures
 import queue
@@ -27,7 +27,6 @@ from qiskit.providers.jobstatus import JobStatus as RuntimeJobStatus
 from qiskit_ibm_runtime import qiskit_runtime_service
 
 from .utils import utc_to_local, validate_job_tags
-from .utils.queueinfo import QueueInfo
 from .constants import DEFAULT_DECODERS, API_TO_JOB_ERROR_MESSAGE
 from .exceptions import (
     IBMError,
@@ -59,9 +58,7 @@ class BaseRuntimeJob(ABC):
         job_id: str,
         program_id: str,
         service: "qiskit_runtime_service.QiskitRuntimeService",
-        client_params: ClientParameters = None,
         creation_date: Optional[str] = None,
-        user_callback: Optional[Callable] = None,
         result_decoder: Optional[Union[Type[ResultDecoder], Sequence[Type[ResultDecoder]]]] = None,
         image: Optional[str] = "",
         session_id: Optional[str] = None,
@@ -74,11 +71,9 @@ class BaseRuntimeJob(ABC):
         Args:
             backend: The backend instance used to run this job.
             api_client: Object for connecting to the server.
-            client_params: (DEPRECATED) Parameters used for server connection.
             job_id: Job ID.
             program_id: ID of the program this job is for.
             creation_date: Job creation date, in UTC.
-            user_callback: (DEPRECATED) User callback function.
             result_decoder: A :class:`ResultDecoder` subclass used to decode job results.
             image: Runtime image used for this job: image_name:tag.
             service: Runtime service.
@@ -101,7 +96,7 @@ class BaseRuntimeJob(ABC):
         self._tags = tags
         self._usage_estimation: Dict[str, Any] = {}
         self._version = version
-        self._queue_info: QueueInfo = None
+        self._queue_info = None
         self._status: Union[RuntimeJobStatus, str] = None
         self._private = private
 
@@ -110,14 +105,6 @@ class BaseRuntimeJob(ABC):
             _, self._final_result_decoder = decoder
         else:
             self._final_result_decoder = decoder
-
-        if user_callback or client_params:
-            issue_deprecation_msg(
-                msg="The job class parameters 'user_callback' and 'client_params' are deprecated",
-                version="0.38.0",
-                remedy="These parameters will have no effect since interim "
-                "results streaming was removed in a previous release.",
-            )
 
     @property
     def private(self) -> bool:
@@ -191,11 +178,14 @@ class BaseRuntimeJob(ABC):
                 Otherwise, return a cached version.
 
         Returns:
-            The backend properties used for this job, at the time the job was run,
+            The backend properties used for this job, at the time the job started running,
             or ``None`` if properties are not available.
         """
-
-        return self._backend.properties(refresh, self.creation_date)
+        job_date = self.creation_date
+        job_running_date = self.metrics().get("timestamps", {}).get("running")
+        if job_running_date:
+            job_date = utc_to_local(job_running_date)
+        return self._backend.properties(refresh, job_date)
 
     def error_message(self) -> Optional[str]:
         """Returns the reason if the job failed.
@@ -378,9 +368,7 @@ class BaseRuntimeJob(ABC):
 
     @property
     def instance(self) -> Optional[str]:
-        """For ibm_quantum channel jobs, return the instance where the job was run.
-        For ibm_cloud and ibm_quantum_platform, the instance crn is returned.
-        """
+        """Return the IBM Cloud instance CRN."""
         return self._backend._instance
 
     @abstractmethod

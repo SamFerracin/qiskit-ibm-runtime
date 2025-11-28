@@ -19,14 +19,8 @@ import traceback
 import dateutil.parser
 from qiskit.circuit.library.standard_gates import get_standard_gate_name_mapping
 
-try:
-    from qiskit.circuit import CONTROL_FLOW_OP_NAMES
-except ImportError:  # Remove when dropping support for Qiskit < 1.3
-    CONTROL_FLOW_OP_NAMES = frozenset(("for_loop", "while_loop", "if_else", "switch_case"))
-
 from ..models import (
     BackendProperties,
-    PulseDefaults,
     QasmBackendConfiguration,
 )
 
@@ -89,17 +83,7 @@ def filter_raw_configuration(
         return
 
     gate_map = get_standard_gate_name_mapping()
-    if use_fractional_gates:
-        raw_config["conditional"] = False
-        if "supported_instructions" in raw_config:
-            raw_config["supported_instructions"] = [
-                i for i in raw_config["supported_instructions"] if i not in CONTROL_FLOW_OP_NAMES
-            ]
-        if "supported_features" in raw_config:
-            raw_config["supported_features"] = [
-                g for g in raw_config["supported_features"] if g != "qasm3"
-            ]
-    else:
+    if not use_fractional_gates:
         if "basis_gates" in raw_config:
             raw_config["basis_gates"] = [
                 g
@@ -118,26 +102,6 @@ def filter_raw_configuration(
                 for i in raw_config["supported_instructions"]
                 if i not in gate_map or not is_fractional_gate(gate_map[i])
             ]
-
-
-def defaults_from_server_data(defaults: Dict) -> PulseDefaults:
-    """Decode pulse defaults data.
-
-    Args:
-        defaults: Raw pulse defaults data.
-
-    Returns:
-        A ``PulseDefaults`` instance.
-    """
-    for item in defaults["pulse_library"]:
-        _decode_pulse_library_item(item)
-
-    for cmd in defaults["cmd_def"]:
-        if "sequence" in cmd:
-            for instr in cmd["sequence"]:
-                _decode_pulse_qobj_instr(instr)
-
-    return PulseDefaults.from_dict(defaults)
 
 
 def properties_from_server_data(
@@ -215,26 +179,3 @@ def _to_complex(value: Union[List[float], complex]) -> complex:
         return value
 
     raise TypeError("{} is not in a valid complex number format.".format(value))
-
-
-def _decode_pulse_library_item(pulse_library_item: Dict) -> None:
-    """Decode a pulse library item.
-
-    Args:
-        pulse_library_item: A ``PulseLibraryItem`` in dictionary format.
-    """
-    pulse_library_item["samples"] = [
-        _to_complex(sample) for sample in pulse_library_item["samples"]
-    ]
-
-
-def _decode_pulse_qobj_instr(pulse_qobj_instr: Dict) -> None:
-    """Decode a pulse Qobj instruction.
-
-    Args:
-        pulse_qobj_instr: A ``PulseQobjInstruction`` in dictionary format.
-    """
-    if "val" in pulse_qobj_instr:
-        pulse_qobj_instr["val"] = _to_complex(pulse_qobj_instr["val"])
-    if "parameters" in pulse_qobj_instr and "amp" in pulse_qobj_instr["parameters"]:
-        pulse_qobj_instr["parameters"]["amp"] = _to_complex(pulse_qobj_instr["parameters"]["amp"])

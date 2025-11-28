@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 100
-target-version = ['py39', 'py310', 'py311', 'py312']
+target-version = ['py39', 'py310', 'py311', 'py312', 'py313']
 
 [tool.towncrier]
 single_file = false
@@ -50,7 +50,7 @@ zip-safe = false
 root = "."
 write_to = "qiskit_ibm_runtime/VERSION.txt"
 version_scheme = "release-branch-semver"
-fallback_version = "0.40.1"
+fallback_version = "0.43.1"
 
 [project]
 name = "qiskit-ibm-runtime"
@@ -74,6 +74,7 @@ classifiers=[
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
 ]
 
@@ -82,7 +83,7 @@ keywords = ["qiskit", "sdk", "quantum", "api", "runtime", "ibm"]
 requires-python=">=3.9"
 
 dependencies = [
-    "requests>=2.19",
+    "requests>=2.19,!=2.32.2",
     "requests-ntlm>=1.1.0",
     "numpy>=1.13",
     "urllib3>=1.21.1",
@@ -97,6 +98,7 @@ dependencies = [
 ibm_backend = "qiskit_ibm_runtime.transpiler.plugin:IBMTranslationPlugin"
 ibm_dynamic_circuits = "qiskit_ibm_runtime.transpiler.plugin:IBMDynamicTranslationPlugin"
 ibm_fractional = "qiskit_ibm_runtime.transpiler.plugin:IBMFractionalTranslationPlugin"
+ibm_dynamic_and_fractional = "qiskit_ibm_runtime.transpiler.plugin:IBMDynamicFractionalTranslationPlugin"
 
 [project.urls]
 documentation = "https://quantum.cloud.ibm.com/docs/"

@@ -49,6 +49,16 @@ class IBMTestCase(TestCase):
         filename = "%s.log" % os.path.splitext(inspect.getfile(cls))[0]
         setup_test_logging(cls.log, filename)
         cls._set_logging_level(logging.getLogger(QISKIT_IBM_RUNTIME_LOGGER_NAME))
+
+        # ignore deprecation warnings for .unit and .duration coming from qiskit
+        # as no suitable migration alternative has been found yet
+        warnings.filterwarnings(
+            "ignore",
+            category=DeprecationWarning,
+            message=r"The property "
+            r"``qiskit\.dagcircuit\.dagcircuit\.DAGCircuit\.(unit|duration)`` is deprecated",
+        )
+
         # fail test on deprecation warnings from qiskit
         warnings.filterwarnings("error", category=DeprecationWarning, module=r"^qiskit$")
 
@@ -239,7 +249,7 @@ class IBMIntegrationJobTestCase(IBMIntegrationTestCase):
         # Simulators or tests backends can be not available
         cls.sim_backends[cls.service.channel] = None
         for backend in backends:
-            if backend.simulator or backend.name.startswith("test_eagle"):
+            if backend.name.startswith("test_eagle"):
                 cls.sim_backends[cls.service.channel] = backend.name
                 break
 

@@ -12,7 +12,7 @@
 
 """Tests for backend functions using real runtime service."""
 
-from unittest import SkipTest, mock
+from unittest import mock
 from datetime import datetime, timedelta
 import copy
 
@@ -31,6 +31,23 @@ from ..utils import bell
 
 class TestIntegrationBackend(IBMIntegrationTestCase):
     """Integration tests for backend functions."""
+
+    @run_integration_test
+    def test_least_busy(self, service):
+        """Test the least busy method."""
+        # test passing an instance
+        instance = self.dependencies.instance
+        backend = service.least_busy(instance=instance)
+        self.assertEqual(instance, backend._instance)
+
+        # test when there is no instance
+        service_with_no_default_instance = QiskitRuntimeService(
+            token=self.dependencies.token,
+            channel="ibm_quantum_platform",
+            url=self.dependencies.url,
+        )
+        backend = service_with_no_default_instance.least_busy()
+        self.assertTrue(backend)
 
     @run_integration_test
     def test_backends(self, service):
@@ -54,8 +71,7 @@ class TestIntegrationBackend(IBMIntegrationTestCase):
     @run_integration_test
     def test_target_reset(self, service):
         """Test confirming target contains reset."""
-        backends = service.backends()
-        backend = service.backend(backends[0].name)
+        backend = service.backend(self.dependencies.qpu)
         self.assertIn("reset", backend.target)
 
 
@@ -68,12 +84,7 @@ class TestIBMBackend(IBMIntegrationTestCase):
         # pylint: disable=arguments-differ
         # pylint: disable=no-value-for-parameter
         super().setUpClass()
-        if cls.dependencies.channel == "ibm_cloud":
-            cls.backend = cls.dependencies.service.backend(cls.dependencies.qpu)
-        if cls.dependencies.channel == "ibm_quantum":
-            cls.dependencies.service._account.instance = (
-                None  # set instance to none to avoid filtering
-            )
+        if cls.dependencies.channel == "ibm_quantum_platform":
             cls.backend = cls.dependencies.service.backend(cls.dependencies.qpu)
 
     def test_backend_service(self):
@@ -110,30 +121,22 @@ class TestIBMBackend(IBMIntegrationTestCase):
     def test_backend_target_refresh(self):
         """Test refreshing the backend target."""
         backend = self.backend
-        if backend.simulator:
-            raise SkipTest("Simulator target is the same.")
         with self.subTest(backend=backend.name):
             old_target = backend.target
             old_configuration = backend.configuration()
             old_properties = backend.properties()
-            old_defaults = backend.defaults()
             backend.refresh()
             new_target = backend.target
             self.assertNotEqual(old_target, new_target)
             self.assertIsNot(old_configuration, backend.configuration())
             self.assertIsNot(old_properties, backend.properties())
-            self.assertIsNot(old_defaults, backend.defaults())
 
-    @production_only
     def test_backend_qubit_properties(self):
         """Check if the qubit properties are set."""
         backend = self.backend
         with self.subTest(backend=backend.name):
-            if backend.simulator:
-                raise SkipTest("Skip since simulator does not have qubit properties.")
             self.assertIsNotNone(backend.qubit_properties(0))
 
-    @production_only
     def test_backend_simulator(self):
         """Test if a configuration attribute (ex: simulator) is available as backend attribute."""
         backend = self.backend
@@ -147,29 +150,15 @@ class TestIBMBackend(IBMIntegrationTestCase):
         with self.subTest(backend=backend.name):
             self.assertTrue(backend.status().operational)
 
-    @production_only
     def test_backend_properties(self):
         """Check the properties of calibration of a real chip."""
         backend = self.backend
         with self.subTest(backend=backend.name):
-            if backend.simulator:
-                raise SkipTest("Skip since simulator does not have properties.")
             properties = backend.properties()
             properties_today = backend.properties(datetime=datetime.today())
             self.assertIsNotNone(properties)
             self.assertIsNotNone(properties_today)
             self.assertEqual(properties.backend_version, properties_today.backend_version)
-
-    @production_only
-    def test_backend_pulse_defaults(self):
-        """Check the backend pulse defaults of each backend."""
-        backend = self.backend
-        with self.subTest(backend=backend.name):
-            if backend.simulator:
-                raise SkipTest("Skip since simulator does not have defaults.")
-            if not backend.open_pulse:
-                raise SkipTest("Skip for backends that do not support pulses.")
-            self.assertIsNotNone(backend.defaults())
 
     def test_backend_configuration(self):
         """Check the backend configuration of each backend."""
@@ -187,8 +176,6 @@ class TestIBMBackend(IBMIntegrationTestCase):
 
     def test_backend_deepcopy(self):
         """Test that deepcopy on IBMBackend works correctly"""
-        if self.backend.simulator:
-            raise SkipTest("Simulator has no backend defaults.")
         backend = self.backend
         with self.subTest(backend=backend.name):
             backend_copy = copy.deepcopy(backend)
@@ -204,27 +191,17 @@ class TestIBMBackend(IBMIntegrationTestCase):
                 )
             self.assertEqual(backend_copy._instance, backend._instance)
             self.assertEqual(
-                backend_copy._service._backend_allowed_list, backend._service._backend_allowed_list
-            )
-            self.assertEqual(backend_copy.defaults().to_dict(), backend.defaults().to_dict())
-            self.assertEqual(
                 backend_copy._api_client._session.base_url,
                 backend._api_client._session.base_url,
             )
 
     def test_backend_pending_jobs(self):
         """Test pending jobs are returned."""
-        if self.dependencies.channel == "ibm_cloud":
-            raise SkipTest("Cloud account does not have real backend.")
         backends = self.service.backends()
         self.assertTrue(any(backend.status().pending_jobs >= 0 for backend in backends))
 
     def test_backend_fetch_all_qubit_properties(self):
         """Check retrieving properties of all qubits"""
-        if self.dependencies.channel == "ibm_cloud":
-            raise SkipTest("Cloud channel does not have instance.")
-        if not self.backend.properties():
-            raise SkipTest("Simulators and fake backends do not have qubit properties.")
         num_qubits = self.backend.num_qubits
         qubits = list(range(num_qubits))
         qubit_properties = self.backend.qubit_properties(qubits)
@@ -261,10 +238,6 @@ class TestIBMBackend(IBMIntegrationTestCase):
 
     def test_too_many_qubits_in_circuit(self):
         """Check error message if circuit contains more qubits than supported on the backend."""
-        if self.dependencies.channel == "ibm_cloud":
-            raise SkipTest("Cloud channel does not have instance.")
-        if not self.backend.properties():
-            raise SkipTest("Simulators and fake backends do not have qubit properties.")
         num = len(self.backend.properties().qubits)
         num_qubits = num + 1
         circuit = QuantumCircuit(num_qubits, num_qubits)
@@ -288,6 +261,21 @@ class TestIBMBackend(IBMIntegrationTestCase):
         self.assertIn("rzz", real_device_fg.basis_gates)
         self.assertNotIn("rzz", real_device_no_fg.basis_gates)
 
+    def test_backend_fractional_gates_error(self):
+        """Test that use_fractional_gates = True raises error for unsupported backends"""
+        backend = self.backend
+        with self.subTest(backend=backend.name):
+            if "rzz" in backend.basis_gates:
+                self.skipTest(f"Backend {backend.name} supports fractional gates, no error.")
+            with self.assertRaises(
+                IBMInputValueError,
+                msg=(
+                    f"Backend '{backend.name}' does not support fractional gates, "
+                    "but use_fractional_gates was set to True."
+                ),
+            ):
+                self.service.backend(backend.name, use_fractional_gates=True)
+
     def test_renew_backend_properties(self):
         """Test renewed backend property"""
         name = self.backend.name
@@ -298,3 +286,13 @@ class TestIBMBackend(IBMIntegrationTestCase):
         # renew backend
         backend = self.service.backend(name)
         self.assertEqual(backend.basis_gates, basis_gates)
+
+    def test_backend_calibration_id(self):
+        """Test calibration_id is used when fetching the configuration."""
+        name = self.backend.name
+        calibration_id = "invalid_id"
+        with self.assertLogs("qiskit_ibm_runtime", level="WARNING") as log:
+            with self.assertRaises(QiskitBackendNotFoundError):
+                self.service.backend(name, calibration_id=calibration_id)
+
+        self.assertTrue(any(calibration_id in record for record in log.output))

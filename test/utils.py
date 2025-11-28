@@ -41,7 +41,7 @@ from qiskit_ibm_runtime.models import (
     BackendProperties,
     BackendConfiguration,
 )
-from qiskit_ibm_runtime.runtime_job import RuntimeJob
+from qiskit_ibm_runtime.runtime_job_v2 import RuntimeJobV2
 from qiskit_ibm_runtime.exceptions import RuntimeInvalidStateError
 
 
@@ -82,7 +82,7 @@ def most_busy_backend(
 
     Args:
         service: Qiskit Runtime Service.
-        instance: The instance in the hub/group/project format.
+        instance: IBM Quantum Platform CRN.
 
     Returns:
         The most busy backend.
@@ -113,7 +113,7 @@ def get_large_circuit(backend: IBMBackend) -> QuantumCircuit:
     return circuit
 
 
-def cancel_job_safe(job: RuntimeJob, logger: logging.Logger) -> bool:
+def cancel_job_safe(job: RuntimeJobV2, logger: logging.Logger) -> bool:
     """Cancel a runtime job."""
     try:
         job.cancel()
@@ -152,7 +152,7 @@ def get_real_device(service):
 def mock_wait_for_final_state(service, job):
     """replace `wait_for_final_state` with a mock function"""
     return mock.patch.object(
-        RuntimeJob,
+        RuntimeJobV2,
         "wait_for_final_state",
         side_effect=service._get_api_client().wait_for_final_state(job.job_id()),
     )
@@ -281,7 +281,6 @@ def get_mocked_backend(
     name: str = "ibm_gotham",
     configuration: Optional[Dict] = None,
     properties: Optional[Dict] = None,
-    defaults: Optional[Dict] = None,
 ) -> IBMBackend:
     """Return a mock backend."""
 
@@ -297,7 +296,6 @@ def get_mocked_backend(
     )
 
     mock_api_client.backend_properties = lambda *args, **kwargs: properties
-    mock_api_client.backend_pulse_defaults = lambda *args, **kwargs: defaults
     mock_api_client.session_details = mock.MagicMock(return_value={"mode": "dedicated"})
     mock_backend = IBMBackend(
         configuration=configuration, service=mock_service, api_client=mock_api_client
@@ -332,7 +330,7 @@ def get_mocked_batch(backend: Any = None) -> mock.MagicMock:
     return batch
 
 
-def submit_and_cancel(backend: IBMBackend, logger: logging.Logger) -> RuntimeJob:
+def submit_and_cancel(backend: IBMBackend, logger: logging.Logger) -> RuntimeJobV2:
     """Submit and cancel a job.
 
     Args:

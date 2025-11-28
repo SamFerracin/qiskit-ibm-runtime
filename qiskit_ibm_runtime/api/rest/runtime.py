@@ -37,7 +37,6 @@ class Runtime(RestAdapterBase):
         "backends": "/backends",
         "cloud_instance": "/instance",
         "cloud_usage": "/instances/usage",
-        "usage": "/usage",
     }
 
     def program_job(self, job_id: str) -> "ProgramJob":
@@ -68,9 +67,6 @@ class Runtime(RestAdapterBase):
         backend_name: Optional[str],
         params: Dict,
         image: Optional[str] = None,
-        hub: Optional[str] = None,
-        group: Optional[str] = None,
-        project: Optional[str] = None,
         log_level: Optional[str] = None,
         session_id: Optional[str] = None,
         job_tags: Optional[List[str]] = None,
@@ -78,6 +74,7 @@ class Runtime(RestAdapterBase):
         start_session: Optional[bool] = False,
         session_time: Optional[int] = None,
         private: Optional[bool] = False,
+        calibration_id: Optional[str] = None,
     ) -> Dict:
         """Execute the program.
 
@@ -86,9 +83,6 @@ class Runtime(RestAdapterBase):
             backend_name: Name of the backend.
             params: Program parameters.
             image: Runtime image.
-            hub: Hub to be used.
-            group: Group to be used.
-            project: Project to be used.
             log_level: Log level to use.
             session_id: ID of the first job in a runtime session.
             job_tags: Tags to be assigned to the job.
@@ -96,6 +90,7 @@ class Runtime(RestAdapterBase):
             start_session: Set to True to explicitly start a runtime session. Defaults to False.
             session_time: Length of session in seconds.
             private: Marks job as private.
+            calibration_id: The calibration id to use with the program execution
 
         Returns:
             JSON response.
@@ -120,12 +115,10 @@ class Runtime(RestAdapterBase):
         if start_session:
             payload["start_session"] = start_session
             payload["session_time"] = session_time
-        if all([hub, group, project]):
-            payload["hub"] = hub
-            payload["group"] = group
-            payload["project"] = project
         if private:
             payload["private"] = True
+        if calibration_id is not None:
+            payload["calibration_id"] = calibration_id
         data = json.dumps(payload, cls=RuntimeEncoder)
         return self.session.post(
             url, data=data, timeout=900, headers=self._HEADER_JSON_CONTENT
@@ -138,9 +131,6 @@ class Runtime(RestAdapterBase):
         backend_name: str = None,
         pending: bool = None,
         program_id: str = None,
-        hub: str = None,
-        group: str = None,
-        project: str = None,
         job_tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         created_after: Optional[datetime] = None,
@@ -156,9 +146,6 @@ class Runtime(RestAdapterBase):
             pending: Returns 'QUEUED' and 'RUNNING' jobs if True,
                 returns 'DONE', 'CANCELLED' and 'ERROR' jobs if False.
             program_id: Filter by Program ID.
-            hub: Filter by hub - hub, group, and project must all be specified.
-            group: Filter by group - hub, group, and project must all be specified.
-            project: Filter by project - hub, group, and project must all be specified.
             job_tags: Filter by tags assigned to jobs. Matched jobs are associated with all tags.
             session_id: Job ID of the first job in a runtime session.
             created_after: Filter by the given start date, in local time. This is used to
@@ -175,7 +162,7 @@ class Runtime(RestAdapterBase):
         """
         url = self.get_url("jobs")
         payload: Dict[str, Union[int, str, List[str]]] = {}
-        payload["exclude_params"] = False
+        payload["exclude_params"] = "true"
         if limit:
             payload["limit"] = limit
         if skip:
@@ -196,8 +183,6 @@ class Runtime(RestAdapterBase):
             payload["created_before"] = local_to_utc(created_before).isoformat()
         if descending is False:
             payload["sort"] = "ASC"
-        if all([hub, group, project]):
-            payload["provider"] = f"{hub}/{group}/{project}"
         return self.session.get(url, params=payload, headers=self._HEADER_JSON_ACCEPT).json()
 
     def backend(self, backend_name: str) -> CloudBackend:
@@ -213,34 +198,18 @@ class Runtime(RestAdapterBase):
 
     def backends(
         self,
-        hgp: Optional[str] = None,
         timeout: Optional[float] = None,
-    ) -> Dict[str, List[str]]:
+    ) -> Dict[str, Any]:
         """Return a list of IBM backends.
 
         Args:
-            hgp: The service instance to use, only for ``ibm_quantum`` channel, in h/g/p format.
             timeout: Number of seconds to wait for the request.
 
         Returns:
             JSON response.
         """
         url = self.get_url("backends")
-        params = {}
-        if hgp:
-            params["provider"] = hgp
-        return self.session.get(
-            url, params=params, timeout=timeout, headers=self._HEADER_JSON_ACCEPT
-        ).json()
-
-    def usage(self) -> Dict[str, Any]:
-        """Return monthly open plan usage information.
-
-        Returns:
-            JSON response.
-        """
-        url = self.get_url("usage")
-        return self.session.get(url, headers=self._HEADER_JSON_ACCEPT).json()
+        return self.session.get(url, timeout=timeout, headers=self._HEADER_JSON_ACCEPT).json()
 
     def cloud_usage(self) -> Dict[str, Any]:
         """Return cloud instance usage information.

@@ -12,6 +12,7 @@
 
 """Tests for Session classession."""
 
+import sys
 from unittest.mock import MagicMock
 
 from qiskit_ibm_runtime.fake_provider import FakeManilaV2
@@ -106,7 +107,7 @@ class TestSession(IBMTestCase):
 
     def test_session_from_id(self):
         """Create session with given session_id"""
-        service = FakeRuntimeService(channel="ibm_quantum", token="abc")
+        service = FakeRuntimeService(channel="ibm_quantum_platform", token="abc")
         session_id = "123"
         session = Session.from_id(session_id=session_id, service=service)
         session._run(program_id="foo", inputs={})
@@ -116,7 +117,7 @@ class TestSession(IBMTestCase):
 
     def test_correct_execution_mode(self):
         """Test that the execution mode is correctly set."""
-        _ = FakeRuntimeService(channel="ibm_quantum", token="abc")
+        _ = FakeRuntimeService(channel="ibm_quantum_platform", token="abc")
         backend = get_mocked_backend("ibm_gotham")
         session = Session(backend=backend)
         self.assertEqual(session.details()["mode"], "dedicated")
@@ -124,7 +125,7 @@ class TestSession(IBMTestCase):
     def test_cm_session_fractional(self):
         """Test instantiating primitive inside session context manager with the fractional optin."""
         service = FakeRuntimeService(
-            channel="ibm_quantum",
+            channel="ibm_quantum_platform",
             token="abc",
             backend_specs=[FakeApiBackendSpecs(backend_name="FakeFractionalBackend")],
         )
@@ -132,3 +133,12 @@ class TestSession(IBMTestCase):
         with Session(backend=backend) as _:
             primitive = SamplerV2()
             self.assertTrue(primitive._backend.options.use_fractional_gates)
+
+    def test_backend_instance_warnings(self):
+        """Test backend instance warnings do not appear."""
+        if sys.version_info < (3, 10):
+            self.skipTest("assertNoLogs is not supported")
+        backend_name = "ibm_gotham"
+        backend = get_mocked_backend(name=backend_name)
+        with self.assertNoLogs("qiskit_ibm_runtime", level="WARNING"):
+            Session(backend=backend)

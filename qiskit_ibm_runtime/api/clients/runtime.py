@@ -22,7 +22,6 @@ from qiskit_ibm_runtime.api.session import RetrySession
 from .backend import BaseBackendClient
 from ..rest.runtime import Runtime
 from ..client_parameters import ClientParameters
-from ...utils.hgp import from_instance_format
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,6 @@ class RuntimeClient(BaseBackendClient):
         backend_name: Optional[str],
         params: Dict,
         image: Optional[str],
-        hgp: Optional[str],
         log_level: Optional[str],
         session_id: Optional[str],
         job_tags: Optional[List[str]] = None,
@@ -62,6 +60,7 @@ class RuntimeClient(BaseBackendClient):
         start_session: Optional[bool] = False,
         session_time: Optional[int] = None,
         private: Optional[bool] = False,
+        calibration_id: Optional[str] = None,
     ) -> Dict:
         """Run the specified program.
 
@@ -70,7 +69,6 @@ class RuntimeClient(BaseBackendClient):
             backend_name: Name of the backend to run the program.
             params: Parameters to use.
             image: The runtime image to use.
-            hgp: Hub/group/project to use.
             log_level: Log level to use.
             session_id: Job ID of the first job in a runtime session.
             job_tags: Tags to be assigned to the job.
@@ -78,14 +76,11 @@ class RuntimeClient(BaseBackendClient):
             start_session: Set to True to explicitly start a runtime session. Defaults to False.
             session_time: Length of session in seconds.
             private: Marks job as private.
+            calibration_id: The calibration id to use with the program execution
 
         Returns:
             JSON response.
         """
-        hgp_dict = {}
-        if hgp:
-            hub, group, project = from_instance_format(hgp)
-            hgp_dict = {"hub": hub, "group": group, "project": project}
         return self._api.program_run(
             program_id=program_id,
             backend_name=backend_name,
@@ -98,7 +93,7 @@ class RuntimeClient(BaseBackendClient):
             start_session=start_session,
             session_time=session_time,
             private=private,
-            **hgp_dict,
+            calibration_id=calibration_id,
         )
 
     def job_get(self, job_id: str, exclude_params: bool = True) -> Dict:
@@ -121,9 +116,6 @@ class RuntimeClient(BaseBackendClient):
         backend_name: str = None,
         pending: bool = None,
         program_id: str = None,
-        hub: str = None,
-        group: str = None,
-        project: str = None,
         job_tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
         created_after: Optional[python_datetime] = None,
@@ -139,9 +131,6 @@ class RuntimeClient(BaseBackendClient):
             pending: Returns 'QUEUED' and 'RUNNING' jobs if True,
                 returns 'DONE', 'CANCELLED' and 'ERROR' jobs if False.
             program_id: Filter by Program ID.
-            hub: Filter by hub - hub, group, and project must all be specified.
-            group: Filter by group - hub, group, and project must all be specified.
-            project: Filter by project - hub, group, and project must all be specified.
             job_tags: Filter by tags assigned to jobs. Matched jobs are associated with all tags.
             session_id: Job ID of the first job in a runtime session.
             created_after: Filter by the given start date, in local time. This is used to
@@ -162,9 +151,6 @@ class RuntimeClient(BaseBackendClient):
             backend_name=backend_name,
             pending=pending,
             program_id=program_id,
-            hub=hub,
-            group=group,
-            project=project,
             job_tags=job_tags,
             session_id=session_id,
             created_after=created_after,
@@ -226,7 +212,6 @@ class RuntimeClient(BaseBackendClient):
         backend: Optional[str] = None,
         instance: Optional[str] = None,
         max_time: Optional[int] = None,
-        channel: Optional[str] = None,
         mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a session.
@@ -234,9 +219,7 @@ class RuntimeClient(BaseBackendClient):
         Args:
             mode: Execution mode.
         """
-        return self._api.runtime_session(session_id=None).create(
-            backend, instance, max_time, channel, mode
-        )
+        return self._api.runtime_session(session_id=None).create(backend, instance, max_time, mode)
 
     def cancel_session(self, session_id: str) -> None:
         """Close all jobs in the runtime session.
@@ -261,27 +244,31 @@ class RuntimeClient(BaseBackendClient):
         """
         return self._api.runtime_session(session_id=session_id).details()
 
-    def list_backends(self, hgp: Optional[str] = None) -> List[str]:
+    def list_backends(self) -> List[Dict[str, Any]]:
         """Return IBM backends available for this service instance.
-
-        Args:
-            hgp: Filter by hub/group/project.
 
         Returns:
             IBM backends available for this service instance.
         """
 
-        return self._api.backends(hgp=hgp)["devices"]
+        return self._api.backends()["devices"]
 
-    def backend_configuration(self, backend_name: str, refresh: bool = False) -> Dict[str, Any]:
+    def backend_configuration(
+        self, backend_name: str, refresh: bool = False, calibration_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Return the configuration of the IBM backend.
 
         Args:
             backend_name: The name of the IBM backend.
+            calibration_id: The calibration id to use for the IBM backend
 
         Returns:
             Backend configuration.
         """
+        # Don't store configuration in registry by name if calibration_id is set
+        # since it is unique to the calibration id, query it fresh with the id set
+        if calibration_id is not None:
+            return self._api.backend(backend_name).configuration(calibration_id=calibration_id)
         if backend_name not in self._configuration_registry or refresh:
             self._configuration_registry[backend_name] = self._api.backend(
                 backend_name
@@ -300,13 +287,17 @@ class RuntimeClient(BaseBackendClient):
         return self._api.backend(backend_name).status()
 
     def backend_properties(
-        self, backend_name: str, datetime: Optional[python_datetime] = None
+        self,
+        backend_name: str,
+        datetime: Optional[python_datetime] = None,
+        calibration_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Return the properties of the IBM backend.
 
         Args:
             backend_name: The name of the IBM backend.
             datetime: Date and time for additional filtering of backend properties.
+            calibration_id: The calibration id to use for the IBM backend
 
         Returns:
             Backend properties.
@@ -314,18 +305,9 @@ class RuntimeClient(BaseBackendClient):
         Raises:
             NotImplementedError: If `datetime` is specified.
         """
-        return self._api.backend(backend_name).properties(datetime=datetime)
-
-    def backend_pulse_defaults(self, backend_name: str) -> Dict:
-        """Return the pulse defaults of the IBM backend.
-
-        Args:
-            backend_name: The name of the IBM backend.
-
-        Returns:
-            Backend pulse defaults.
-        """
-        return self._api.backend(backend_name).pulse_defaults()
+        return self._api.backend(backend_name).properties(
+            datetime=datetime, calibration_id=calibration_id
+        )
 
     def update_tags(self, job_id: str, tags: list) -> Response:
         """Update the tags of the job.
@@ -338,14 +320,6 @@ class RuntimeClient(BaseBackendClient):
             API Response.
         """
         return self._api.program_job(job_id).update_tags(tags)
-
-    def usage(self) -> Dict[str, Any]:
-        """Return monthly open plan usage information.
-
-        Returns:
-            API Response.
-        """
-        return self._api.usage()
 
     def cloud_usage(self) -> Dict[str, Any]:
         """Return cloud instance usage information.

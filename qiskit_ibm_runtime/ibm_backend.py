@@ -13,7 +13,7 @@
 """Module for interfacing with an IBM Quantum Backend."""
 
 import logging
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Union
 from datetime import datetime as python_datetime
 from copy import deepcopy
 from packaging.version import Version
@@ -26,7 +26,6 @@ from qiskit.transpiler.target import Target
 from .models import (
     BackendStatus,
     BackendProperties,
-    PulseDefaults,
     GateConfig,
     QasmBackendConfiguration,
 )
@@ -41,12 +40,10 @@ from .exceptions import (
 from .utils.backend_converter import convert_to_target
 
 from .utils.backend_decoder import (
-    defaults_from_server_data,
     properties_from_server_data,
     configuration_from_server_data,
 )
 from .utils import local_to_utc
-from .utils.deprecation import issue_deprecation_msg
 
 if Version(qiskit_version).major >= 2:
     from qiskit.result import MeasLevel, MeasReturnType
@@ -159,6 +156,7 @@ class IBMBackend(Backend):
         service: "qiskit_runtime_service.QiskitRuntimeService",
         api_client: RuntimeClient,
         instance: Optional[str] = None,
+        calibration_id: Optional[str] = None,
     ) -> None:
         """IBMBackend constructor.
 
@@ -166,18 +164,19 @@ class IBMBackend(Backend):
             configuration: Backend configuration.
             service: Instance of QiskitRuntimeService.
             api_client: IBM client used to communicate with the server.
+            calibration_id: An optional calibration id to use for this backend
         """
         super().__init__(
             name=configuration.backend_name,
             online_date=configuration.online_date,
             backend_version=configuration.backend_version,
         )
+        self._calibration_id = calibration_id
         self._instance = instance
         self._service = service
         self._api_client = api_client
         self._configuration = deepcopy(configuration)
         self._properties: Any = None
-        self._defaults: Any = None
         self._target: Any = None
         if (
             not self._configuration.simulator
@@ -199,14 +198,13 @@ class IBMBackend(Backend):
         does not yet exist on IBMBackend class.
         """
         # Prevent recursion since these properties are accessed within __getattr__
-        if name in ["_properties", "_defaults", "_target", "_configuration"]:
+        if name in ["_properties", "_target", "_configuration"]:
             raise AttributeError(
                 "'{}' object has no attribute '{}'".format(self.__class__.__name__, name)
             )
 
         # Lazy load properties and pulse defaults and construct the target object.
         self.properties()
-        self.defaults()
         self._convert_to_target()
         # Check if the attribute now is available on IBMBackend class due to above steps
         try:
@@ -223,7 +221,7 @@ class IBMBackend(Backend):
             )
 
     def _convert_to_target(self, refresh: bool = False) -> None:
-        """Converts backend configuration, properties and defaults to Target object"""
+        """Converts backend configuration and properties to Target object"""
         if refresh or not self._target:
             self._target = convert_to_target(
                 configuration=self._configuration,  # type: ignore[arg-type]
@@ -249,6 +247,11 @@ class IBMBackend(Backend):
             noise_model=None,
             seed_simulator=None,
         )
+
+    @property
+    def calibration_id(self) -> Union[str, None]:
+        """The calibration id used for this backend."""
+        return self._calibration_id
 
     @property
     def service(self) -> "qiskit_runtime_service.QiskitRuntimeService":
@@ -316,14 +319,13 @@ class IBMBackend(Backend):
         """Retrieve the newest backend configuration and refresh the current backend target."""
         if config := configuration_from_server_data(
             raw_config=self._service._get_api_client(self._instance).backend_configuration(
-                self.name, refresh=True
+                self.name, refresh=True, calibration_id=self.calibration_id
             ),
             instance=self._instance,
             use_fractional_gates=self.options.use_fractional_gates,
         ):
             self._configuration = config
         self.properties(refresh=True)  # pylint: disable=unexpected-keyword-arg
-        self.defaults(refresh=True)
         self._convert_to_target(refresh=True)
 
     def properties(
@@ -345,7 +347,6 @@ class IBMBackend(Backend):
             datetime: By specifying `datetime`, this function returns an instance
                 of the :class:`BackendProperties<~.providers.models.BackendProperties>`
                 whose timestamp is closest to, but older than, the specified `datetime`.
-                Note that this is only supported using ``ibm_quantum`` runtime.
 
         Returns:
             The backend properties or ``None`` if the backend properties are not
@@ -369,7 +370,9 @@ class IBMBackend(Backend):
                 raise TypeError("'{}' is not of type 'datetime'.")
             datetime = local_to_utc(datetime)
         if datetime or refresh or self._properties is None:
-            api_properties = self._api_client.backend_properties(self.name, datetime=datetime)
+            api_properties = self._api_client.backend_properties(
+                self.name, datetime=datetime, calibration_id=self.calibration_id
+            )
             if not api_properties:
                 return None
             backend_properties = properties_from_server_data(
@@ -404,37 +407,6 @@ class IBMBackend(Backend):
                 "Unexpected return value received from the server when "
                 "getting backend status: {}".format(str(ex))
             ) from ex
-
-    def defaults(self, refresh: bool = False) -> Optional[PulseDefaults]:
-        """(DEPRECATED) Return the pulse defaults for the backend.
-
-        The schema for default pulse configuration can be found in
-        `Qiskit/ibm-quantum-schemas/default_pulse_configuration
-        <https://github.com/Qiskit/ibm-quantum-schemas/blob/main/schemas/default_pulse_configuration_schema.json>`_.
-
-        Args:
-            refresh: If ``True``, re-query the server for the backend pulse defaults.
-                Otherwise, return a cached version.
-
-        Returns:
-            The backend pulse defaults or ``None`` if the backend does not support pulse.
-        """
-
-        issue_deprecation_msg(
-            "The defaults method and the PulseDefaults class have been deprecated",
-            "0.38.0",
-            "IBM backends no longer support pulse gates and are no longer used to "
-            "construct the backend target. ",
-        )
-
-        if refresh or self._defaults is None:
-            api_defaults = self._api_client.backend_pulse_defaults(self.name)
-            if api_defaults:
-                self._defaults = defaults_from_server_data(api_defaults)
-            else:
-                self._defaults = None
-
-        return self._defaults
 
     def configuration(
         self,
@@ -515,7 +487,6 @@ class IBMBackend(Backend):
         cpy.online_date = self.online_date
         cpy.backend_version = self.backend_version
         cpy._coupling_map = self._coupling_map
-        cpy._defaults = deepcopy(self._defaults, _memo)
         cpy._target = deepcopy(self._target, _memo)
         cpy._options = deepcopy(self._options, _memo)
         return cpy
@@ -536,7 +507,7 @@ class IBMBackend(Backend):
         """Return the default translation stage plugin name for IBM backends."""
         if not self.options.use_fractional_gates:
             return "ibm_dynamic_circuits"
-        return "ibm_fractional"
+        return "ibm_dynamic_and_fractional"
 
 
 class IBMRetiredBackend(IBMBackend):
@@ -571,10 +542,6 @@ class IBMRetiredBackend(IBMBackend):
 
     def properties(self, refresh: bool = False, datetime: Optional[python_datetime] = None) -> None:
         """Return the backend properties."""
-        return None
-
-    def defaults(self, refresh: bool = False) -> None:
-        """Return the pulse defaults for the backend."""
         return None
 
     def status(self) -> BackendStatus:

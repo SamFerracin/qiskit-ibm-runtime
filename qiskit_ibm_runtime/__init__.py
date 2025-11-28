@@ -192,18 +192,17 @@ Classes
    Session
    Batch
    IBMBackend
-   RuntimeJob
    RuntimeJobV2
    RuntimeEncoder
    RuntimeDecoder
 """
 
+import sys
 import logging
 import warnings
 
 from .qiskit_runtime_service import QiskitRuntimeService
 from .ibm_backend import IBMBackend
-from .runtime_job import RuntimeJob
 from .runtime_job_v2 import RuntimeJobV2
 from .runtime_options import RuntimeOptions
 from .utils.json import RuntimeEncoder, RuntimeDecoder
@@ -237,3 +236,12 @@ QISKIT_IBM_RUNTIME_LOG_LEVEL = "QISKIT_IBM_RUNTIME_LOG_LEVEL"
 """The environment variable name that is used to set the level for the IBM Quantum logger."""
 QISKIT_IBM_RUNTIME_LOG_FILE = "QISKIT_IBM_RUNTIME_LOG_FILE"
 """The environment variable name that is used to set the file for the IBM Quantum logger."""
+
+if sys.version_info < (3, 10):
+    warnings.warn(
+        "Using qiskit-ibm-runtime with Python 3.9 is deprecated as of the 0.41.0 release. "
+        "Support for running qiskit-ibm-runtime with Python 3.9 will be removed in a future "
+        "release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )

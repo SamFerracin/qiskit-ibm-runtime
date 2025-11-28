@@ -68,22 +68,49 @@ def _get_instance_tags(
 class TestQuantumPlatform(IBMIntegrationTestCase):
     """Integration tests for account management."""
 
-    def _skip_on_ibm_quantum(self):
-        if self.dependencies.channel == "ibm_quantum":
-            self.skipTest("Not supported on ibm_quantum")
-
     def test_initializing_service_no_instance(self):
         """Test initializing without an instance."""
-        self._skip_on_ibm_quantum()
-        service = QiskitRuntimeService(
-            token=self.dependencies.token, channel="ibm_quantum_platform", url=self.dependencies.url
-        )
-        self.assertTrue(service)
-        self.assertTrue(service.backends())
+
+        # no default instance and no filters
+        with self.assertLogs("qiskit_ibm_runtime", level="WARNING") as logs:
+            service = QiskitRuntimeService(
+                token=self.dependencies.token,
+                channel="ibm_quantum_platform",
+                url=self.dependencies.url,
+            )
+            self.assertTrue(service)
+            message = logs.output[1]
+            self.assertIn("Free and trial", message)
+
+        # no defualt instance and plans_preference
+        with self.assertLogs("qiskit_ibm_runtime", level="WARNING") as logs:
+            service = QiskitRuntimeService(
+                token=self.dependencies.token,
+                channel="ibm_quantum_platform",
+                url=self.dependencies.url,
+                plans_preference=["internal"],
+            )
+            self.assertTrue(service)
+            message = logs.output[1]
+            self.assertNotIn("Free and trial", message)
+            self.assertIn("available account instances are", message)
+
+        # no defualt instance and region
+        region = "us-east"
+        with self.assertLogs("qiskit_ibm_runtime", level="WARNING") as logs:
+            service = QiskitRuntimeService(
+                token=self.dependencies.token,
+                channel="ibm_quantum_platform",
+                url=self.dependencies.url,
+                region=region,
+            )
+            self.assertTrue(service)
+            message = logs.output[1]
+            self.assertIn("Free and trial", message)
+            self.assertIn(f"region: {region}", message)
 
     def test_backends_default_instance(self):
         """Test that default instance returns the correct backends."""
-        self._skip_on_ibm_quantum()
         service_with_instance = QiskitRuntimeService(
             token=self.dependencies.token,
             url=self.dependencies.url,
@@ -108,7 +135,6 @@ class TestQuantumPlatform(IBMIntegrationTestCase):
 
     def test_passing_name_as_instance(self):
         """Test passing in a name as the instance."""
-        self._skip_on_ibm_quantum()
         with self.assertRaises(IBMInputValueError):
             QiskitRuntimeService(
                 token=self.dependencies.token,
@@ -225,6 +251,17 @@ class TestQuantumPlatform(IBMIntegrationTestCase):
         self.assertTrue(instances[0]["crn"])
         self.assertTrue(instances[0]["name"])
 
+    def test_active_instance(self):
+        """Test active_instance method."""
+        instance = self.dependencies.instance
+        service = QiskitRuntimeService(
+            token=self.dependencies.token,
+            channel="ibm_quantum_platform",
+            url=self.dependencies.url,
+            instance=instance,
+        )
+        self.assertEqual(instance, service.active_instance())
+
     def test_jobs_before_backend(self):
         """Test retrieving jobs before backends call."""
         service = QiskitRuntimeService(
@@ -234,7 +271,7 @@ class TestQuantumPlatform(IBMIntegrationTestCase):
         jobs = service.jobs()
         self.assertTrue(jobs)
         job = jobs[0]
-        self.assertTrue(job.result())
+        self.assertTrue(job.status())
 
     def test_jobs_different_instances(self):
         """Test retrieving jobs from different instances."""
@@ -261,6 +298,7 @@ class TestQuantumPlatform(IBMIntegrationTestCase):
         )
         usage = service.usage()
         self.assertTrue(usage)
+        self.assertIsInstance(usage["usage_remaining_seconds"], int)
         self.assertIsInstance(usage, dict)
 
 

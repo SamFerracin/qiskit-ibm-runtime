@@ -16,7 +16,6 @@
 import itertools
 import operator
 
-from unittest import SkipTest
 from ddt import ddt, data, idata, unpack
 
 from qiskit.circuit import QuantumCircuit
@@ -28,7 +27,7 @@ from qiskit.circuit.library import (
 )
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
-from qiskit_ibm_runtime import SamplerV2 as Sampler
+from qiskit_ibm_runtime import QiskitRuntimeService, SamplerV2 as Sampler
 
 from qiskit_ibm_runtime.fake_provider import (
     FakeProviderForBackendV2,
@@ -116,23 +115,11 @@ class TestFakeBackends(IBMTestCase):
                 self.assertLess(i, 1)
 
         self.assertIsInstance(configuration.to_dict(), dict)
-
-    @data(*FAKE_PROVIDER_FOR_BACKEND_V2.backends())
-    def test_defaults_to_dict(self, backend):
-        if hasattr(backend, "defaults"):
-            defaults = backend.defaults()
-            if defaults:
-                self.assertIsInstance(defaults.to_dict(), dict)
-
-                for i in defaults.qubit_freq_est:
-                    self.assertGreater(i, 1e6)
-                    self.assertGreater(i, 1e6)
-
-                for i in defaults.meas_freq_est:
-                    self.assertGreater(i, 1e6)
-                    self.assertGreater(i, 1e6)
-        else:
-            self.skipTest("Backend %s does not have defaults" % backend)
+        # test unit/value consistency on roundtrip
+        if hasattr(configuration, "rep_times"):
+            config_dict = configuration.to_dict()
+            roundtrip_config = configuration.from_dict(config_dict)
+            self.assertEqual(configuration.rep_times, roundtrip_config.rep_times)
 
     def test_delay_circuit(self):
         backend = FakeMumbaiV2()
@@ -167,23 +154,25 @@ class TestRefreshFakeBackends(IBMIntegrationTestCase):
     @production_only
     def test_refresh_method(self):
         """Test refresh method"""
-        if self.dependencies.channel == "ibm_cloud":
-            raise SkipTest("Cloud account does not have real backends.")
         # to verify the data files will be updated
         old_backend = FakeSherbrooke()
         # change some configuration
         old_backend.backend_version = "fake_version"
-        # set instance to none to access real backend
-        self.service._account.instance = None
+
+        service = QiskitRuntimeService(
+            token=self.dependencies.token,
+            channel=self.dependencies.channel,
+            url=self.dependencies.url,
+        )
 
         with self.assertLogs("qiskit_ibm_runtime", level="INFO") as logs:
-            old_backend.refresh(self.service)
-        self.assertIn("The backend fake_sherbrooke has been updated", logs.output[0])
+            old_backend.refresh(service)
+        self.assertIn("The backend fake_sherbrooke has been updated", logs.output[1])
 
         # to verify the refresh can't be done
         wrong_backend = FakeSherbrooke()
         # set a non-existent backend name
         wrong_backend.backend_name = "wrong_fake_sherbrooke"
         with self.assertLogs("qiskit_ibm_runtime", level="WARNING") as logs:
-            wrong_backend.refresh(self.service)
+            wrong_backend.refresh(service)
         self.assertIn("The refreshing of wrong_fake_sherbrooke has failed", logs.output[0])
