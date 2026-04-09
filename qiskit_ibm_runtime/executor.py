@@ -27,7 +27,7 @@ from .batch import Batch
 from .options.executor_options import ExecutorOptions
 from .quantum_program import QuantumProgram
 from .quantum_program.converters import quantum_program_to_0_2
-from .quantum_program.quantum_program_decoders import QuantumProgramResultDecoder
+from .quantum_program.quantum_program_result_decoders import QuantumProgramResultDecoder
 from .runtime_job_v2 import RuntimeJobV2
 from .runtime_options import RuntimeOptions
 from .utils.default_session import get_cm_session

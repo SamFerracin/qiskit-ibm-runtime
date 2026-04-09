@@ -29,7 +29,7 @@ from .converters import quantum_program_result_from_0_2
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_DECODERS = {
+AVAILABLE_RESULT_DECODERS = {
     "v0.1": (quantum_program_result_from_0_1, QuantumProgramResultModel_0_1),
     "v0.2": (quantum_program_result_from_0_2, QuantumProgramResultModel_0_2),
 }
@@ -49,7 +49,7 @@ class QuantumProgramResultDecoder(ResultDecoder):
             raise ValueError("Missing schema version.")
 
         try:
-            decoder, model = AVAILABLE_DECODERS[schema_version]
+            decoder, model = AVAILABLE_RESULT_DECODERS[schema_version]
         except KeyError:
             raise ValueError(f"No decoder found for schema version {schema_version}.")
 
