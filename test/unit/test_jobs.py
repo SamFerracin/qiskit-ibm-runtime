@@ -14,9 +14,13 @@
 
 import random
 import time
+import warnings
 from unittest.mock import patch
+import numpy as np
+from ddt import ddt, data
 
 from qiskit.providers.exceptions import QiskitBackendNotFoundError
+from qiskit.circuit import QuantumCircuit, Parameter
 
 from qiskit_ibm_runtime import RuntimeJobV2
 from qiskit_ibm_runtime.constants import API_TO_JOB_ERROR_MESSAGE
@@ -26,6 +30,13 @@ from qiskit_ibm_runtime.exceptions import (
     RuntimeJobMaxTimeoutError,
     RuntimeInvalidStateError,
 )
+from qiskit_ibm_runtime.quantum_program import QuantumProgram
+from qiskit_ibm_runtime.quantum_program.quantum_program import CircuitItem
+from qiskit_ibm_runtime.quantum_program.quantum_program_params_converters import (
+    QuantumProgramParamsConverter,
+    AVAILABLE_CONVERTERS,
+)
+from qiskit_ibm_runtime.options import ExecutorOptions
 from .mock.fake_runtime_client import (
     FailedRuntimeJob,
     FailedRanTooLongRuntimeJob,
@@ -38,6 +49,7 @@ from ..program import run_program
 from ..utils import mock_wait_for_final_state
 
 
+@ddt
 class TestRuntimeJob(IBMTestCase):
     """Class for testing runtime jobs."""
 
@@ -190,3 +202,146 @@ class TestRuntimeJob(IBMTestCase):
         with patch.object(BaseFakeRuntimeClient, "cloud_usage", return_value=instance_usage_msg_3):
             with self.assertWarnsRegex(UserWarning, r"There is currently no more time available"):
                 run_program(service=service)
+
+    @run_cloud_fake
+    @data(*AVAILABLE_CONVERTERS.keys())
+    def test_job_inputs_executor_decode(self, schema_version, service):
+        """Test job.inputs property decodes executor quantum programs for all schema versions."""
+        # Create a parameterized quantum circuit
+        theta = Parameter("theta")
+        phi = Parameter("phi")
+        circuit = QuantumCircuit(2)
+        circuit.rx(theta, 0)
+        circuit.ry(phi, 1)
+        circuit.cx(0, 1)
+        circuit.measure_all()
+
+        # Create quantum program and options
+        quantum_program = QuantumProgram(
+            shots=1024,
+            items=[CircuitItem(circuit=circuit, circuit_arguments=np.array([[0.5, 0.3]]))],
+        )
+        options = ExecutorOptions()
+        options.execution.init_qubits = True
+        options.execution.rep_delay = 0.001
+
+        # Encode to the specified schema version
+        encoded_params = QuantumProgramParamsConverter.encode(
+            schema_version, quantum_program, options
+        )
+        params_dict = encoded_params.model_dump()
+
+        # Create a job with executor program_id
+        job = run_program(service=service, program_id="executor")
+
+        # Mock the API response to include our encoded params
+        with patch.object(
+            service._get_api_client(),
+            "job_get",
+            return_value={
+                "id": job.job_id(),
+                "backend": "backend0",
+                "state": {"status": "COMPLETED"},
+                "program": {"id": "executor"},
+                "params": params_dict,
+            },
+        ):
+            inputs = job.inputs
+
+            # Verify the params were decoded
+            self.assertIn("quantum_program", inputs)
+            self.assertIn("options", inputs)
+            self.assertIsInstance(inputs["quantum_program"], QuantumProgram)
+            self.assertIsInstance(inputs["options"], ExecutorOptions)
+            self.assertEqual(inputs["quantum_program"].shots, 1024)
+            self.assertEqual(len(inputs["quantum_program"].items), 1)
+            self.assertTrue(inputs["options"].execution.init_qubits)
+            self.assertEqual(inputs["options"].execution.rep_delay, 0.001)
+
+    @run_cloud_fake
+    def test_job_inputs_executor_decode_failure(self, service):
+        """Test job.inputs property handles decode failures gracefully."""
+        # Create a job with executor program_id
+        job = run_program(service=service, program_id="executor")
+
+        # Mock the API response with invalid params that will fail to decode
+        with patch.object(
+            service._get_api_client(),
+            "job_get",
+            return_value={
+                "id": job.job_id(),
+                "backend": "backend0",
+                "state": {"status": "COMPLETED"},
+                "program": {"id": "executor"},
+                "params": {"invalid": "data", "schema_version": "v0.1"},
+            },
+        ):
+            # Should emit a warning and return the raw params
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                inputs = job.inputs
+
+                # Verify warning was raised
+                self.assertEqual(len(w), 1)
+                self.assertIn("Unable to convert 'params'", str(w[0].message))
+
+                # Verify raw params are returned
+                self.assertIn("invalid", inputs)
+                self.assertNotIn("quantum_program", inputs)
+                self.assertNotIn("options", inputs)
+
+    @run_cloud_fake
+    def test_job_inputs_executor_missing_schema_version(self, service):
+        """Test job.inputs property handles missing schema_version gracefully."""
+        # Create a job with executor program_id
+        job = run_program(service=service, program_id="executor")
+
+        # Mock the API response with params missing schema_version
+        with patch.object(
+            service._get_api_client(),
+            "job_get",
+            return_value={
+                "id": job.job_id(),
+                "backend": "backend0",
+                "state": {"status": "COMPLETED"},
+                "program": {"id": "executor"},
+                "params": {"some_param": "value"},
+            },
+        ):
+            # Should emit a warning and return the raw params
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                inputs = job.inputs
+
+                # Verify warning was raised
+                self.assertEqual(len(w), 1)
+                self.assertIn("Unable to convert 'params'", str(w[0].message))
+
+                # Verify raw params are returned
+                self.assertIn("some_param", inputs)
+                self.assertNotIn("quantum_program", inputs)
+
+    @run_cloud_fake
+    def test_job_inputs_non_executor(self, service):
+        """Test job.inputs property doesn't decode for non-executor programs."""
+        # Create a job with a different program_id
+        job = run_program(service=service, program_id="sampler")
+
+        # Mock the API response
+        with patch.object(
+            service._get_api_client(),
+            "job_get",
+            return_value={
+                "id": job.job_id(),
+                "backend": "backend0",
+                "state": {"status": "COMPLETED"},
+                "program": {"id": "sampler"},
+                "params": {"pubs": [], "options": {}},
+            },
+        ):
+            inputs = job.inputs
+
+            # Verify params are returned as-is without decoding
+            self.assertIn("pubs", inputs)
+            self.assertIn("options", inputs)
+            self.assertNotIn("quantum_program", inputs)
