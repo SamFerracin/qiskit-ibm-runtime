@@ -260,3 +260,29 @@ class TestQuantumProgramConverters(IBMTestCase):
         self.assertEqual(items[0].circuit, quantum_program.items[0].circuit)
         self.assertIsInstance(items[1], SamplexItem)
         self.assertEqual(items[1].circuit, quantum_program.items[1].circuit)
+
+    def test_passthrough_data_roundtrip(self):
+        """Test passthrough data in a roundtrip."""
+        quantum_program = QuantumProgram(100, items=[CircuitItem(circuit=QuantumCircuit(1))])
+
+        quantum_program.passthrough_data = (
+            passthrough_data := {
+                "str": "ciao",
+                "float": 1.2,
+                "int": 1,
+                "bool": True,
+                "none": None,
+                "list": [1, 2, 3],
+                "array": np.array([1.0, 2.0]),
+            }
+        )
+
+        quantum_program_out, _ = quantum_program_from_1_0(
+            quantum_program_to_1_0(quantum_program, ExecutorOptions())
+        )
+        passthrough_data_out = quantum_program_out.passthrough_data
+
+        self.assertEqual(passthrough_data.keys(), passthrough_data_out.keys())
+        for key in ["str", "float", "int", "bool", "none", "list"]:
+            self.assertEqual(passthrough_data[key], passthrough_data_out[key])
+        np.testing.assert_array_equal(passthrough_data["array"], passthrough_data_out["array"])

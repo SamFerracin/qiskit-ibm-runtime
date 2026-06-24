@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import TYPE_CHECKING
 
 import numpy as np
 from ibm_quantum_schemas.common import (
@@ -35,6 +36,25 @@ from samplomatic.tensor_interface import PauliLindbladMapSpecification, TensorSp
 from ...options_models.executor_options import ExecutorOptions
 from ...utils.utils import get_qpy_version, get_ssv_version
 from ..quantum_program import CircuitItem, QuantumProgram, SamplexItem
+
+if TYPE_CHECKING:
+    from ibm_quantum_schemas.executor.version_1_0.models import DataTree as DataTreeModel
+
+    from ..datatree import DataTree
+
+
+def passthrough_data_to_0_2(passthrough_data: DataTree) -> DataTreeModel:
+    """Convert passthrough data to schema model."""
+    if isinstance(passthrough_data, np.ndarray):
+        return TensorModel.from_numpy(passthrough_data)
+    return passthrough_data
+
+
+def passthrough_data_from_0_2(passthrough_data: DataTreeModel) -> DataTree:
+    """Convert passthrough data from schema model."""
+    if isinstance(passthrough_data, TensorModel):
+        return passthrough_data.to_numpy()
+    return passthrough_data
 
 
 def quantum_program_from_0_2(model: ParamsModel) -> tuple[QuantumProgram, ExecutorOptions]:
@@ -84,7 +104,7 @@ def quantum_program_from_0_2(model: ParamsModel) -> tuple[QuantumProgram, Execut
         shots=program_model.shots,
         items=items,
         meas_level=program_model.meas_level,
-        passthrough_data=program_model.passthrough_data,
+        passthrough_data=passthrough_data_from_0_2(program_model.passthrough_data),
     )
 
     options = ExecutorOptions()
@@ -145,7 +165,7 @@ def quantum_program_to_0_2(program: QuantumProgram, options: ExecutorOptions) ->
             shots=program.shots,
             items=model_items,
             meas_level=program.meas_level,
-            passthrough_data=program.passthrough_data,
+            passthrough_data=passthrough_data_to_0_2(program.passthrough_data),
         ),
         options=options_dict,
     )
