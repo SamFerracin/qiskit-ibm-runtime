@@ -48,6 +48,10 @@ def passthrough_data_to_1_0(passthrough_data: DataTree) -> DataTreeModel:
     """Convert passthrough data to schema model."""
     if isinstance(passthrough_data, np.ndarray):
         return TensorModel.from_numpy(passthrough_data)
+    if isinstance(passthrough_data, dict):
+        return {key: passthrough_data_to_1_0(val) for key, val in passthrough_data.items()}
+    if isinstance(passthrough_data, (list, tuple)):
+        return [passthrough_data_to_1_0(el) for el in passthrough_data]
     return passthrough_data
 
 
@@ -55,6 +59,10 @@ def passthrough_data_from_1_0(passthrough_data: DataTreeModel) -> DataTree:
     """Convert passthrough data from schema model."""
     if isinstance(passthrough_data, TensorModel):
         return passthrough_data.to_numpy()
+    if isinstance(passthrough_data, dict):
+        return {key: passthrough_data_from_1_0(val) for key, val in passthrough_data.items()}
+    if isinstance(passthrough_data, list):
+        return [passthrough_data_from_1_0(el) for el in passthrough_data]
     return passthrough_data
 
 
