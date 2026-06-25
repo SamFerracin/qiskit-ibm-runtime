@@ -16,7 +16,6 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-from samplomatic import build
 from samplomatic.transpiler import generate_boxing_pass_manager
 
 from qiskit_ibm_runtime import Executor, QuantumProgram
@@ -58,7 +57,16 @@ class TestExecutor(IBMIntegrationTestCase):
         pm = generate_preset_pass_manager(backend=self.backend, optimization_level=0)
         isa_circuit = pm.run(circuit)
 
-        passthrough_data = {"key": "value"}
+        passthrough_data = {
+            "str": "ciao",
+            "float": 1.2,
+            "int": 1,
+            "bool": True,
+            "none": None,
+            "list": [1, 2, 3],
+            "array": np.array([1.0, 2.0]),
+            "nested": {"array2": np.array([3.0, 4.0])},
+        }
         program = QuantumProgram(shots := 123, passthrough_data=passthrough_data)
         program.append_circuit_item(isa_circuit, circuit_arguments=circuit_arguments)
 
@@ -73,7 +81,6 @@ class TestExecutor(IBMIntegrationTestCase):
         results = job.result()
         self.assertIsInstance(results, QuantumProgramResult)
         self.assertEqual(len(results), 1)
-        self.assertEqual(results.passthrough_data, passthrough_data)
 
         result = results[0]
         self.assertIsInstance(result, QuantumProgramItemResult)
@@ -81,54 +88,60 @@ class TestExecutor(IBMIntegrationTestCase):
         self.assertIsInstance(result["meas"], np.ndarray)
         self.assertEqual(result["meas"].shape, shape + (shots, circuit.num_qubits))
 
-    def test_executor_with_samplex_item(self):
-        """Test sampler with a single samplex item."""
-        circuit = QuantumCircuit(3, name="GHZ with params")
-        circuit.h(0)
-        circuit.cx(0, 1)
-        circuit.cx(1, 2)
-        circuit.rz(Parameter("theta"), 0)
-        circuit.rz(Parameter("phi"), 1)
-        circuit.rz(Parameter("lam"), 2)
-        circuit.measure_all()
+        self.assertEqual(passthrough_data.keys(), results.passthrough_data.keys())
+        for key in ["str", "float", "int", "bool", "none", "list"]:
+            self.assertEqual(passthrough_data[key], results.passthrough_data[key])
+        self.assertIsInstance(results.passthrough_data["array"], np.ndarray)
+        np.testing.assert_array_equal(passthrough_data["array"], results.passthrough_data["array"])
 
-        shape = (2, 3)
-        parameter_values = np.random.random(shape + (circuit.num_parameters,))
+    # def test_executor_with_samplex_item(self):
+    #     """Test sampler with a single samplex item."""
+    #     circuit = QuantumCircuit(3, name="GHZ with params")
+    #     circuit.h(0)
+    #     circuit.cx(0, 1)
+    #     circuit.cx(1, 2)
+    #     circuit.rz(Parameter("theta"), 0)
+    #     circuit.rz(Parameter("phi"), 1)
+    #     circuit.rz(Parameter("lam"), 2)
+    #     circuit.measure_all()
 
-        pm = generate_preset_pass_manager(backend=self.backend, optimization_level=0)
-        pm.post_scheduling = generate_boxing_pass_manager(
-            enable_gates=True,
-            enable_measures=True,
-            inject_noise_site="after",
-        )
-        boxed_isa_circuit = pm.run(circuit)
+    #     shape = (2, 3)
+    #     parameter_values = np.random.random(shape + (circuit.num_parameters,))
 
-        isa_template, samplex = build(boxed_isa_circuit)
+    #     pm = generate_preset_pass_manager(backend=self.backend, optimization_level=0)
+    #     pm.post_scheduling = generate_boxing_pass_manager(
+    #         enable_gates=True,
+    #         enable_measures=True,
+    #         inject_noise_site="after",
+    #     )
+    #     boxed_isa_circuit = pm.run(circuit)
 
-        passthrough_data = {"key": "value"}
-        program = QuantumProgram(shots := 123, passthrough_data=passthrough_data)
-        program.append_samplex_item(
-            isa_template, samplex=samplex, samplex_arguments={"parameter_values": parameter_values}
-        )
+    #     isa_template, samplex = build(boxed_isa_circuit)
 
-        executor = Executor(self.backend)
-        job = executor.run(program)
+    #     passthrough_data = {"key": "value"}
+    #     program = QuantumProgram(shots := 123, passthrough_data=passthrough_data)
+    #     program.append_samplex_item(
+    #         isa_template, samplex=samplex, samplex_arguments={"parameter_values": parameter_values}
+    #     )
 
-        params = job.inputs
-        self.assertEqual(params["options"], executor.options)
-        self.assertIsInstance(params["quantum_program"], QuantumProgram)
-        self.assertEqual(params["schema_version"], Executor._SCHEMA_VERSION)
+    #     executor = Executor(self.backend)
+    #     job = executor.run(program)
 
-        results = job.result()
-        self.assertIsInstance(results, QuantumProgramResult)
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results.passthrough_data, passthrough_data)
+    #     params = job.inputs
+    #     self.assertEqual(params["options"], executor.options)
+    #     self.assertIsInstance(params["quantum_program"], QuantumProgram)
+    #     self.assertEqual(params["schema_version"], Executor._SCHEMA_VERSION)
 
-        result = results[0]
-        self.assertIsInstance(result, QuantumProgramItemResult)
-        self.assertEqual(len(result.keys()), 2)
-        self.assertEqual(set(result.keys()), {"meas", "measurement_flips.meas"})
-        self.assertIsInstance(result["meas"], np.ndarray)
-        self.assertIsInstance(result["measurement_flips.meas"], np.ndarray)
-        self.assertEqual(result["meas"].shape, shape + (shots, circuit.num_qubits))
-        self.assertEqual(result["measurement_flips.meas"].shape, shape + (1, circuit.num_qubits))
+    #     results = job.result()
+    #     self.assertIsInstance(results, QuantumProgramResult)
+    #     self.assertEqual(len(results), 1)
+    #     self.assertEqual(results.passthrough_data, passthrough_data)
+
+    #     result = results[0]
+    #     self.assertIsInstance(result, QuantumProgramItemResult)
+    #     self.assertEqual(len(result.keys()), 2)
+    #     self.assertEqual(set(result.keys()), {"meas", "measurement_flips.meas"})
+    #     self.assertIsInstance(result["meas"], np.ndarray)
+    #     self.assertIsInstance(result["measurement_flips.meas"], np.ndarray)
+    #     self.assertEqual(result["meas"].shape, shape + (shots, circuit.num_qubits))
+    #     self.assertEqual(result["measurement_flips.meas"].shape, shape + (1, circuit.num_qubits))

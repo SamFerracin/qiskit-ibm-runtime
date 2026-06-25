@@ -112,6 +112,7 @@ def quantum_program_from_1_1(model: ParamsModel) -> tuple[QuantumProgram, Execut
         passthrough_data=passthrough_data_from_1_1(program_model.passthrough_data),
     )
     quantum_program._semantic_role = program_model.semantic_role
+    print(passthrough_data_from_1_1(program_model.passthrough_data))
 
     options = ExecutorOptions()
     model_options = model.options.model_copy(deep=True)
