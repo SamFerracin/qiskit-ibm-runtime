@@ -43,27 +43,33 @@ if TYPE_CHECKING:
 
     from ..datatree import DataTree
 
+from .passthrough_data_converters import (
+    PassthroughDataAdapter,
+    passthrough_data_from_schema,
+    passthrough_data_to_schema,
+)
+
+
+class PassthroughDataAdapter_1_1(PassthroughDataAdapter):
+    """The conversion operations used for passthrough data to/from v1.1."""
+
+    def tensor_model_from_numpy(self, value) -> TensorModel:
+        """Convert from numpy to a schema model."""
+        return TensorModel.from_numpy(value)
+
+    def tensor_model_to_numpy(self, value: dict) -> np.ndarray:
+        """Convert from a schema model to numpy."""
+        return TensorModel(**value).to_numpy()
+
 
 def passthrough_data_to_1_1(passthrough_data: DataTree) -> DataTreeModel:
     """Convert passthrough data to schema model."""
-    if isinstance(passthrough_data, np.ndarray):
-        return TensorModel.from_numpy(passthrough_data)
-    if isinstance(passthrough_data, dict):
-        return {key: passthrough_data_to_1_1(val) for key, val in passthrough_data.items()}
-    if isinstance(passthrough_data, list):
-        return [passthrough_data_to_1_1(el) for el in passthrough_data]
-    return passthrough_data
+    return passthrough_data_to_schema(passthrough_data, PassthroughDataAdapter_1_1())
 
 
 def passthrough_data_from_1_1(passthrough_data: DataTreeModel) -> DataTree:
     """Convert passthrough data from schema model."""
-    if isinstance(passthrough_data, TensorModel):
-        return passthrough_data.to_numpy()
-    if isinstance(passthrough_data, dict):
-        return {key: passthrough_data_from_1_1(val) for key, val in passthrough_data.items()}
-    if isinstance(passthrough_data, (list, tuple)):
-        return [passthrough_data_from_1_1(el) for el in passthrough_data]
-    return passthrough_data
+    return passthrough_data_from_schema(passthrough_data, PassthroughDataAdapter_1_1())
 
 
 def quantum_program_from_1_1(model: ParamsModel) -> tuple[QuantumProgram, ExecutorOptions]:
@@ -112,7 +118,6 @@ def quantum_program_from_1_1(model: ParamsModel) -> tuple[QuantumProgram, Execut
         passthrough_data=passthrough_data_from_1_1(program_model.passthrough_data),
     )
     quantum_program._semantic_role = program_model.semantic_role
-    print(passthrough_data_from_1_1(program_model.passthrough_data))
 
     options = ExecutorOptions()
     model_options = model.options.model_copy(deep=True)
