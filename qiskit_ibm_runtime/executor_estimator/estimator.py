@@ -122,6 +122,54 @@ class EstimatorV2(BaseEstimatorV2):
 
         super().__setattr__(name, value)
 
+    def finalize_options(self) -> EstimatorOptions:
+        """Finalize options."""
+        # Begin by initializing options based on resilience level
+        options = EstimatorOptions()
+        if (resilience_level := self.options.resilience_level) == 0:
+            options.twirling.enable_gates = False
+            options.twirling.enable_measure = False
+            options.resilience.measure_mitigation = False
+        elif resilience_level == 1:
+            options.twirling.enable_gates = False
+            options.twirling.enable_measure = True
+            options.resilience.measure_mitigation = True
+        elif resilience_level == 2:
+            options.twirling.enable_gates = True
+            options.twirling.enable_measure = True
+            options.resilience.measure_mitigation = True
+            options.resilience.zne_mitigation = True
+            raise ValueError("Not yet implemented -- missing ZNE.")
+
+        # Dump user options, excluding values that have been set to ``None``--these values are
+        # decided based on the resilience level.
+        exclude = {
+            "twirling": {
+                field
+                for field in ("enable_gates", "enable_measure")
+                if getattr(self.options.twirling, field) is None
+            },
+            "resilience": {
+                field
+                for field in ("measure_mitigation", "zne_mitigation")
+                if getattr(self.options.resilience, field) is None
+            },
+        }
+        exclude = {k: v for k, v in exclude.items() if v}
+        options.update(**self.options.model_dump(exclude=exclude))
+
+        # Finally, force-set some values based on mitigation
+        if options.resilience.measure_mitigation is True:
+            options.twirling.enable_measure = True
+        if options.resilience.zne_mitigation is True and options.resilience.zne.amplifier == "pea":
+            options.twirling.enable_gates = True
+            options.twirling.enable_measure = True
+        if options.resilience.pec_mitigation is True:
+            options.twirling.enable_gates = True
+            options.twirling.enable_measure = True
+
+        return options
+
     def run(
         self, pubs: Iterable[EstimatorPubLike], *, precision: float | None = None
     ) -> RuntimeJobV2:
@@ -150,6 +198,8 @@ class EstimatorV2(BaseEstimatorV2):
             IBMInputValueError: If precision is not properly specified or if unsupported
                 options are detected.
         """
+        options = self.finalize_options()
+
         # Coerce pubs to EstimatorPub objects
         coerced_pubs = [EstimatorPub.coerce(pub, precision) for pub in pubs]
 
@@ -159,12 +209,12 @@ class EstimatorV2(BaseEstimatorV2):
         resolved_precision = resolve_precision(coerced_pubs, precision)
         if resolved_precision is not None:
             shots = int(np.ceil(1.0 / (resolved_precision**2)))
-        elif self.options.default_shots is not None:
-            shots = int(self.options.default_shots)
+        elif options.default_shots is not None:
+            shots = int(options.default_shots)
         else:
-            shots = int(np.ceil(1.0 / (self.options.default_precision**2)))
+            shots = int(np.ceil(1.0 / (options.default_precision**2)))
 
-        if self.options.dynamical_decoupling.enable:
+        if options.dynamical_decoupling.enable:
             for pub in coerced_pubs:
                 if pub.circuit.has_control_flow_op():
                     raise IBMInputValueError(
@@ -173,46 +223,46 @@ class EstimatorV2(BaseEstimatorV2):
                     )
 
         # Route to appropriate prepare function
-        if self.options.resilience.pec_mitigation:
-            if self.options.resilience.noise_model_mapping is None:
+        if options.resilience.pec_mitigation:
+            if options.resilience.noise_model_mapping is None:
                 raise IBMInputValueError(
                     "When PEC mitigation is enabled, you must provide a noise model "
                     "via options.resilience.noise_model_mapping"
                 )
             quantum_program = prepare_pec(
                 pubs=coerced_pubs,
-                twirling_options=self.options.twirling,
+                twirling_options=options.twirling,
                 shots=shots,
-                pec_options=self.options.resilience.pec,
-                noise_model_mapping=self.options.resilience.noise_model_mapping,
-                measure_noise_learning=self.options.resilience.measure_noise_learning
-                if self.options.resilience.measure_mitigation
+                pec_options=options.resilience.pec,
+                noise_model_mapping=options.resilience.noise_model_mapping,
+                measure_noise_learning=options.resilience.measure_noise_learning
+                if options.resilience.measure_mitigation
                 else None,
             )
         else:
             quantum_program = prepare(
                 pubs=coerced_pubs,
-                twirling_options=self.options.twirling,
+                twirling_options=options.twirling,
                 shots=shots,
-                measure_noise_learning=self.options.resilience.measure_noise_learning
-                if self.options.resilience.measure_mitigation
+                measure_noise_learning=options.resilience.measure_noise_learning
+                if options.resilience.measure_mitigation
                 else None,
             )
 
-        if self.options.dynamical_decoupling.enable:
+        if options.dynamical_decoupling.enable:
             quantum_program = apply_dynamical_decoupling(
                 backend=self._executor._backend,
-                dd_options=self.options.dynamical_decoupling,
+                dd_options=options.dynamical_decoupling,
                 quantum_program=quantum_program,
             )
         # Serialize options (assuming passthrough is correctly configured)
         quantum_program.passthrough_data["post_processor"]["options"] = {  # type: ignore[index, call-overload]
-            "twirling": self.options.twirling.model_dump(),
-            "dynamical_decoupling": self.options.dynamical_decoupling.model_dump(),
-            "resilience": self.options.resilience.model_dump(exclude={"noise_model_mapping"}),
+            "twirling": options.twirling.model_dump(),
+            "dynamical_decoupling": options.dynamical_decoupling.model_dump(),
+            "resilience": options.resilience.model_dump(exclude={"noise_model_mapping"}),
         }
 
-        executor_options = self.options.to_executor_options()
+        executor_options = options.to_executor_options()
 
         # Set executor options
         self._executor.options = executor_options

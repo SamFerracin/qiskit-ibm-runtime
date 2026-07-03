@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field, field_validator
 from qiskit.quantum_info import PauliLindbladMap
 
@@ -25,12 +27,15 @@ from .utils import OptionsModel
 class ResilienceOptions(OptionsModel):
     """Resilience options for V2 Estimator."""
 
-    measure_mitigation: bool = True
+    measure_mitigation: bool | None = None
     """Whether to enable measurement error mitigation method.
 
     If you enable measurement mitigation, you can fine-tune its noise learning
     by using :attr:`~measure_noise_learning`. See :class:`.~MeasureNoiseLearningOptions`
     for all measurement mitigation noise learning options.
+
+    If ``measure_mitigation`` is ``None``, it is determined by the according to the resilience
+    level: it is ``False`` for resilience level 0, and ``True`` for resilience levels 1 and 2.
     """
 
     measure_noise_learning: MeasureNoiseLearningOptions = Field(
@@ -56,12 +61,39 @@ class ResilienceOptions(OptionsModel):
     See :class:`PecOptions` for all options.
     """
 
+    zne_mitigation: bool | None = None
+    """Whether to turn on Zero-Noise Extrapolation error mitigation method.
+
+    If you enable ZNE, you can fine-tune its options by using :attr:`~zne`. See
+    :class:`~.ZneOptions` for additional ZNE related options.
+
+    If ``zne_mitigation`` is ``None``, it is determined by the server according to the resilience
+    level: it is ``False`` for resilience levels ``0`` and ``1``, and ``True`` for resilience level
+    ``2``.
+    """
+
     noise_model_mapping: dict[str, PauliLindbladMap] | None = None
     """A noise model mapping for PEC mitigation.
 
     Maps layer references (strings) to :class:`~qiskit.quantum_info.PauliLindbladMap`
     objects that describe the noise characteristics of that layer. The dict contains
     layers from all PUBs. This is required when using PEC mitigation.
+    """
+
+    resilience_level: Literal[0, 1, 2] = 1
+    """How much resilience to build against errors.
+
+    Higher levels generate more accurate results, at the expense of longer processing times.
+
+    * 0: No mitigation.
+    * 1: Minimal mitigation costs. Mitigate error associated with readout errors.
+    * 2: Medium mitigation costs. Typically reduces bias in estimators but it is not guaranteed to
+        be zero bias.
+
+    Refer to the
+    `Configure error mitigation for Qiskit Runtime
+    <https://quantum.cloud.ibm.com/docs/guides/configure-error-mitigation>`_ guide
+    for more information about the error mitigation methods used at each level.
     """
 
     @field_validator("noise_model_mapping", mode="plain")
