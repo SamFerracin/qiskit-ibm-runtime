@@ -65,8 +65,12 @@ class ClientSideProgram(ABC, Generic[InputT, OptionsT]):
 
     @property
     @abstractmethod
-    def default_options(self) -> OptionsT:
+    def _default_options(self) -> OptionsT:
         """The default options of this program."""
+
+    @abstractmethod
+    def prepare(self, **kwargs: InputT) -> tuple[QuantumProgram, ExecutorOptions]:
+        """The function used to map this program's inputs to the inputs of Executor."""
 
     def __init__(
         self,
@@ -76,7 +80,7 @@ class ClientSideProgram(ABC, Generic[InputT, OptionsT]):
         super().__init__()
 
         self._mode, self._service, self._backend = get_mode_service_backend(mode)
-        self.options = options if options is not None else self.default_options  # type: ignore[assignment]
+        self.options = options if options is not None else self._default_options  # type: ignore[assignment]
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Set attribute ``name`` to ``value``.
@@ -87,9 +91,12 @@ class ClientSideProgram(ABC, Generic[InputT, OptionsT]):
         """
         if name == "options":
             if isinstance(value, dict):
-                value = self.options.update(**value)
-            elif not isinstance(value, type(self.options)):
-                raise TypeError(f"Expected {type(self.options)} or dict, got {type(value)}")
+                options = self._default_options
+                options.update(**value)
+                value = options
+            elif not isinstance(value, type(self._default_options)):
+                name = self._default_options.__class__.__name__
+                raise TypeError(f"Expected {name} or dict, got {type(value)}")
 
         super().__setattr__(name, value)
 
@@ -106,15 +113,11 @@ class ClientSideProgram(ABC, Generic[InputT, OptionsT]):
         """
         return self._mode
 
-    @abstractmethod
-    def prepare(self, input: InputT) -> tuple[QuantumProgram, ExecutorOptions]:
-        """The function used to map this program's inputs to the inputs of Executor."""
-
-    def _run(self, input: InputT, *, dry_run: bool = False) -> RuntimeJobV2 | LocalRuntimeJob:
+    def _run(self, dry_run: bool, **kwargs: InputT) -> RuntimeJobV2 | LocalRuntimeJob:
         """Run a job via Executor."""
         # Pre-process: Convert Estimator input into a QuantumProgram
         logger.info("Starting pre-processing")
-        quantum_program, executor_options = self.prepare(input)
+        quantum_program, executor_options = self.prepare(**kwargs)
 
         # Set semantic role for post-processing dispatch
         quantum_program._semantic_role = self._semantic_role
